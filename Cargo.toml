@@ -1,0 +1,35 @@
+[package]
+name = "vibar"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+description = "Unofficial macOS menu bar client for the ReAI-Vibe-Board keyboard. Connects over Bluetooth, no vendor app needed."
+license = "MIT"
+repository = "https://github.com/koalaauto/reaiboard-vibar"
+homepage = "https://github.com/koalaauto/reaiboard-vibar"
+readme = "README.md"
+keywords = ["macos", "keyboard", "bluetooth", "menubar", "reai-vibe-board"]
+# Depends on a git revision of the vendor SDK, so it cannot go to crates.io.
+publish = false
+
+[dependencies]
+# Pinned to a tested commit: it contains the BLE host-handshake fix (#18) that is newer than tag v0.3.5.
+# Switch to a tag once the vendor SDK publishes one.
+reai-board-sdk = { git = "https://github.com/ReAI-com/reai-board-sdk", rev = "654d7ea3bea38b53292cf80830352a756513c19c", features = ["virtual-mic"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal"] }
+anyhow = "1"
+env_logger = "0.11"
+enigo = "0.6"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+tray-icon = "0.26"
+tao = "0.37"
+libc = "0.2"
+png = "0.18"
+core-foundation = "0.10"
+coreaudio-sys = "0.2"
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-foundation = "0.3"
+wry = "0.57"
+serde_json = "1"

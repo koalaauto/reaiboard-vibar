@@ -1,0 +1,19 @@
+# 键盘上每个输入对应什么操作,保存后约 1 秒自动生效。
+# 一般不用手改,在 Vibar 的设置窗口里点选更方便。
+#
+#   "cmd+n"                        按一次快捷键
+#   { hold = "f18" }               按住期间保持按下
+#   { media = "volume_up" }        媒体键 volume_up volume_down mute play_pause
+#   { shell = "open -a Safari" }   运行命令
+
+[bindings]
+knob_ccw   = "up"
+knob_cw    = "down"
+knob_press = "return"
+
+tab    = "tab"
+new    = "cmd+n"
+esc    = "esc"
+voice  = { hold = "f18" }
+action = "cmd+return"
+enter  = "return"

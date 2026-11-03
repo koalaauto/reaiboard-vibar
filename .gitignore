@@ -1,0 +1,11 @@
+# Build output
+/target/
+/build/
+
+# Local reference checkout of the vendor SDK (the dependency is pinned by git rev in Cargo.toml)
+/sdk/
+
+# Private working notes, never published
+/local-notes/
+
+.DS_Store
