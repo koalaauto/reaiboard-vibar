@@ -1,8 +1,10 @@
-//! 麦克风:把键盘的板载麦克风变成系统麦克风。
+//! Microphone. Turns the keyboard's onboard microphone into a system microphone.
 //!
-//! 流程:装驱动(一次性,需管理员密码) → 用户启用 → 键盘已连接且有 App 在录 →
-//! 向键盘申请音频流 → SDK 解码 mSBC → 经本机 UDP 送进驱动 → 系统里的 "ReAI-Vibe-Board" 设备出声。
-//! 没人录音时立刻停流:省电,也保证没人用时键盘麦克风是关的。
+//! Flow: install the driver (once, needs the administrator password), the user enables it, the
+//! keyboard is connected and an app is recording, ask the keyboard for an audio stream, the SDK
+//! decodes mSBC, the PCM goes into the driver over local UDP, and the system's "ReAI-Vibe-Board"
+//! device then carries the sound. The stream stops at once when nobody is recording, which saves
+//! power and keeps the keyboard microphone off while nobody uses it.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -17,26 +19,27 @@ use crate::i18n::Msg;
 
 const LEASE_ID: u32 = 0x5642_4152; // "VBAR"
 const LEASE_TTL_MS: u16 = 5_000;
-/// 没人录之后再等几个 tick(500ms 一次)才停流,避免 App 反复探测麦克风造成抖动
+/// Ticks (500 ms each) to wait after the last recorder is gone before stopping the stream. Apps
+/// that probe the microphone repeatedly would otherwise make the stream flap.
 const STOP_GRACE_TICKS: u8 = 3;
-/// 每几个 tick 给音频租约续一次期(500ms × 4 = 2s)
+/// Ticks between audio lease renewals (500 ms × 4 = 2 s)
 const HEARTBEAT_TICKS: u8 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MicState {
-    /// 用户没有启用
+    /// Not enabled by the user
     Off,
-    /// 正在安装驱动(等管理员密码)
+    /// Installing the driver, waiting for the administrator password
     Installing,
-    /// 已启用,键盘没连上
+    /// Enabled, the keyboard is not connected
     WaitingKeyboard,
-    /// 已启用且键盘在线,没有 App 在录
+    /// Enabled and the keyboard is online, no app is recording
     Idle,
-    /// 有 App 在录,音频流动中
+    /// An app is recording and audio is flowing
     InUse,
 }
 
-/// 安装驱动的结果
+/// Result of installing the driver
 #[derive(Debug)]
 pub enum InstallOutcome {
     Installed,
@@ -44,7 +47,7 @@ pub enum InstallOutcome {
     Failed(String),
 }
 
-// ---------- 音频电平:给日志和排障用,证明声音真的流进来了 ----------
+// ---------- Audio level, for logs and troubleshooting, proves that sound really arrives ----------
 
 #[derive(Default)]
 struct Stats {
@@ -53,7 +56,7 @@ struct Stats {
     sum_sq: f64,
 }
 
-/// 累计收到的 PCM 统计,按需取走并清零
+/// Running statistics of the PCM received. Taking them also resets them.
 #[derive(Default)]
 pub struct Meter(Mutex<Stats>);
 
@@ -67,7 +70,7 @@ impl Meter {
         }
     }
 
-    /// 返回 (采样数, 均方根, 峰值) 并清零
+    /// Returns (sample count, RMS, peak) and resets the counters
     pub fn take(&self) -> (u64, f32, f32) {
         let mut st = self.0.lock().unwrap();
         let rms = if st.samples == 0 {
@@ -81,7 +84,7 @@ impl Meter {
     }
 }
 
-/// 在把 PCM 送进虚拟麦克风的同时记录电平
+/// Records the level while passing PCM on to the virtual microphone
 pub struct MeteredSink {
     inner: VirtualMic,
     meter: Arc<Meter>,
@@ -100,7 +103,7 @@ impl PcmSink for MeteredSink {
     }
 }
 
-// ---------- 持久化:用户是否启用了麦克风 ----------
+// ---------- Persistence of whether the user has enabled the microphone ----------
 
 #[derive(Serialize, Deserialize, Default)]
 struct Persisted {
@@ -130,13 +133,13 @@ fn save_enabled(on: bool) {
     }
 }
 
-// ---------- 驱动的安装 / 移除 ----------
+// ---------- Driver install and removal ----------
 
 pub fn is_installed() -> bool {
     VirtualMic::is_installed()
 }
 
-/// 启动时、还没连上键盘之前的麦克风状态,界面用它显示真实情况
+/// Microphone state at startup before the keyboard connects, so the UI shows the real situation
 pub fn initial_state() -> (MicState, bool) {
     let installed = is_installed();
     let state = if load_enabled() && installed {
@@ -147,7 +150,7 @@ pub fn initial_state() -> (MicState, bool) {
     (state, installed)
 }
 
-/// App 包里自带的驱动位置:Vibar.app/Contents/Resources/ReAIVibeBoard.driver
+/// Driver shipped inside the app bundle, at Vibar.app/Contents/Resources/ReAIVibeBoard.driver
 fn bundled_driver() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let p = exe
@@ -212,14 +215,14 @@ pub fn remove_driver() -> Result<(), String> {
     VirtualMic::uninstall().map_err(|e| e.to_string())
 }
 
-// ---------- 状态机 ----------
+// ---------- State machine ----------
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 enum Lease {
     None,
-    /// 固件 v1.59+ 的带租约音频流
+    /// Leased audio stream, firmware v1.59 and later
     Managed,
-    /// 旧固件的纯会话流
+    /// Plain session stream of older firmware
     Legacy,
 }
 
@@ -241,7 +244,7 @@ impl MicCtl {
     pub fn new(meter: Arc<Meter>) -> Self {
         Self {
             meter,
-            // 驱动被手动删掉时,不能还假装已启用
+            // If the driver was deleted by hand, do not pretend it is still enabled
             enabled: load_enabled() && is_installed(),
             installing: false,
             connected: false,
@@ -269,7 +272,7 @@ impl MicCtl {
         }
     }
 
-    /// 状态相对上一次上报有变化时返回新状态,否则 None(用于去重)
+    /// New state if it changed since the last report, otherwise None. This deduplicates reports.
     pub fn take_change(&mut self) -> Option<(MicState, bool)> {
         let now = (self.state(), is_installed());
         (self.reported != Some(now)).then(|| {
@@ -281,7 +284,7 @@ impl MicCtl {
     pub fn set_connected(&mut self, connected: bool) {
         self.connected = connected;
         if !connected {
-            // 连接已断,租约自然作废,不必再发停止命令
+            // The connection is gone, so the lease lapses on its own and no stop command is needed
             self.lease = Lease::None;
             self.beat = 0;
         }
@@ -296,15 +299,16 @@ impl MicCtl {
         save_enabled(on);
     }
 
-    /// 用户关闭:先停流再标记
+    /// User turned the microphone off. Stop the stream first, then mark it disabled.
     pub async fn disable(&mut self, device: &BoardDevice) {
         self.stop(device).await;
         self.set_enabled(false);
     }
 
-    /// 每 500ms 调一次:看有没有人在录 → 开/停流 → 续租
+    /// Called every 500 ms. See if anyone is recording, start or stop the stream, renew the lease.
     pub async fn tick(&mut self, device: &BoardDevice) {
-        // 设备可能晚于我们出现(刚装完驱动)或中途消失(驱动被移除),每次都重新确认
+        // The device may appear after us (driver just installed) or vanish midway (driver removed),
+        // so the lookup is repeated whenever the id is unknown.
         if self.device_id.is_none() {
             self.device_id = coreaudio::find_device(DEVICE_NAME);
         }
@@ -462,7 +466,7 @@ mod tests {
 
     #[test]
     fn initial_state_is_off_without_a_driver() {
-        // 没装驱动时,无论设置里记了什么,都不能假装已启用
+        // Without the driver, never pretend to be enabled, whatever the saved settings say
         let (state, installed) = initial_state();
         if !installed {
             assert_eq!(state, MicState::Off);

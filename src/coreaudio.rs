@@ -1,5 +1,6 @@
-//! CoreAudio 查询:虚拟麦克风此刻有没有被某个 App 打开录音。
-//! 用于「按需推流」:有人在录才向键盘要音频,没人录就停,省电也保护隐私。
+//! CoreAudio query, whether some app currently has the virtual microphone open for recording.
+//! Used for on-demand streaming. Audio is requested from the keyboard only while someone is
+//! recording and is stopped otherwise, which saves power and protects privacy.
 
 use std::ffi::c_void;
 use std::mem::size_of;
@@ -22,9 +23,9 @@ fn address(selector: u32) -> AudioObjectPropertyAddress {
     }
 }
 
-/// 按名字找系统里的音频设备
+/// Finds an audio device in the system by name
 pub fn find_device(name: &str) -> Option<AudioObjectID> {
-    // SAFETY: 只调用 CoreAudio 的只读属性查询,缓冲区大小由系统先报告再分配。
+    // SAFETY: Read-only CoreAudio property queries, buffer sized from the size the system reports.
     unsafe {
         let addr = address(kAudioHardwarePropertyDevices);
         let mut size = 0u32;
@@ -65,13 +66,14 @@ unsafe fn device_name(id: AudioObjectID) -> Option<String> {
     if status != 0 || cf.is_null() {
         return None;
     }
-    // 属性返回的是已 retain 的对象,按 create 规则接管
+    // The property returns an already retained object, so take ownership under the create rule
     Some(CFString::wrap_under_create_rule(cf).to_string())
 }
 
-/// 设备此刻是否正被某个进程用于 IO。查询失败(设备已消失)返回 None。
+/// Whether some process is using the device for IO right now. Returns None if the query fails
+/// because the device has disappeared.
 pub fn is_running_somewhere(id: AudioObjectID) -> Option<bool> {
-    // SAFETY: 读取一个 u32 属性。
+    // SAFETY: Reads one u32 property.
     unsafe {
         let addr = address(kAudioDevicePropertyDeviceIsRunningSomewhere);
         let mut value = 0u32;
@@ -99,8 +101,9 @@ mod tests {
 
     #[test]
     fn system_has_at_least_one_audio_device_with_a_readable_name() {
-        // 默认输出设备一定存在;只要能枚举并读出名字就说明 FFI 正确
-        // (CI 无声卡环境下允许为空,不算失败)
+        // A machine normally has a default output device. Being able to query the device list
+        // at all shows the FFI is correct. An empty list is not a failure, for example in CI
+        // without a sound card.
         unsafe {
             let addr = address(kAudioHardwarePropertyDevices);
             let mut size = 0u32;

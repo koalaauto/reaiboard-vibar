@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""生成全部图标资源(可复现,改设计就改这个脚本):
+"""Generates all icon assets. Reproducible, so change this script to change the design.
 
-  assets/menubar-connected.png     菜单栏图标·已连接(实心,模板图,46×36 = 23×18pt @2x)
-  assets/menubar-disconnected.png  菜单栏图标·未连接(空心线框)
-  assets/menubar-voice-dark.png    语音键按住时:白色机身 + 右上角黄点(深色菜单栏用,非模板)
-  assets/menubar-voice-light.png   同上,黑色机身(浅色菜单栏用)
-  assets/AppIcon.icns              App 图标(Finder / 关于)
-  assets/AppIcon-1024.png          App 图标源图
+  assets/menubar-connected.png     Menu bar icon, connected (solid, template image,
+                                   46×36 = 23×18pt @2x)
+  assets/menubar-disconnected.png  Menu bar icon, disconnected (hollow outline)
+  assets/menubar-voice-dark.png    While the voice key is held: white body plus a yellow dot at
+                                   the top right (for a dark menu bar, not a template)
+  assets/menubar-voice-light.png   Same, with a black body (for a light menu bar)
+  assets/AppIcon.icns              App icon (Finder and About window)
+  assets/AppIcon-1024.png          Source image of the app icon
 
-图标几何以机身中心为原点(单位:@2x 像素)。画布比机身宽,机身两侧留出空白,
-选中状态下系统画的高亮底不会贴着机身边缘。
+Icon geometry has its origin at the body center, in @2x pixels. The canvas is wider than the body
+and leaves empty space on both sides of it, so the highlight the system draws behind a selected
+menu bar item does not touch the body edge.
 
-依赖:Pillow、numpy、macOS 自带的 iconutil。用法: python3 scripts/make-icons.py
+Needs Pillow, numpy and iconutil, which ships with macOS. Usage: python3 scripts/make-icons.py
 """
 import math
 import subprocess
@@ -24,23 +27,23 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "assets"
 
-# ---------- 几何(机身中心为原点) ----------
-BODY_HW, BODY_HH, BODY_R = 17.0, 11.0, 5.0      # 机身半宽、半高、圆角
-PAD = 4.0                                        # 机身边缘到旋钮 / 按键的内边距
+# ---------- Geometry, origin at the body center ----------
+BODY_HW, BODY_HH, BODY_R = 17.0, 11.0, 5.0      # body half width, half height, corner radius
+PAD = 4.0                                        # inset from the body edge to the knob and keys
 KNOB_R = 4.4
-KNOB = (-BODY_HW + PAD + KNOB_R, 0.0)            # 旋钮在左,完整的圆
-KEY_HALF, KEY_STEP, KEY_ROW = 1.9, 4.8, 3.3      # 按键半边长、列距、行偏移
-_last = BODY_HW - PAD - KEY_HALF                 # 最右一列的中心,右内边距与左边对称
+KNOB = (-BODY_HW + PAD + KNOB_R, 0.0)            # knob on the left, a full circle
+KEY_HALF, KEY_STEP, KEY_ROW = 1.9, 4.8, 3.3      # key half side, column pitch, row offset
+_last = BODY_HW - PAD - KEY_HALF                 # rightmost column center, mirrors the left inset
 KEYS = [(_last - (2 - c) * KEY_STEP, (-1 + 2 * r) * KEY_ROW) for r in range(2) for c in range(3)]
 
-# ---------- 菜单栏图标:有符号距离场 + 超采样抗锯齿 ----------
+# ---------- Menu bar icons, signed distance field plus supersampled antialiasing ----------
 W, H, SS = 46, 36, 8
 CX, CY = W / 2, H / 2
 
 
 def rrect(x, y, cx, cy, hw, hh, r):
     qx, qy = abs(x - cx) - (hw - r), abs(y - cy) - (hh - r)
-    return math.hypot(max(qx, 0), max(qy, 0)) + min(max(qx, qy), 0) - r  # <0 在内部
+    return math.hypot(max(qx, 0), max(qy, 0)) + min(max(qx, qy), 0) - r  # negative means inside
 
 
 def circle(x, y, cx, cy, r):
@@ -52,27 +55,29 @@ def keys_hit(x, y):
 
 
 def connected(x, y):
-    """实心机身,按键与旋钮镂空(旋钮是完整的圆)。x、y 是相对机身中心的坐标。"""
+    """Solid body with the keys and the knob cut out, the knob being a full circle.
+    x and y are relative to the body center."""
     if rrect(x, y, 0, 0, BODY_HW, BODY_HH, BODY_R) >= 0:
         return False
     return not (keys_hit(x, y) or circle(x, y, *KNOB, KNOB_R) < 0)
 
 
 def disconnected(x, y):
-    """空心线框:机身描边,按键实心,旋钮是完整的圆环。"""
+    """Hollow outline: the body is stroked, the keys are solid, the knob is a full ring."""
     frame = -2.2 < rrect(x, y, 0, 0, BODY_HW, BODY_HH, BODY_R) < 0
     knob_ring = -2.0 < circle(x, y, *KNOB, KNOB_R) < 0
     return frame or keys_hit(x, y) or knob_ring
 
 
-# 语音键按住时的指示:机身右上角的黄点,周围挖一圈空隙让它从机身上"浮"出来
-DOT_C = (BODY_HW + 1.2, -BODY_HH - 0.2)   # 挂在机身外的右上角,不碰按键
+# Indicator while the voice key is held: a yellow dot at the top right, with a gap cut out around it so it floats off the body
+DOT_C = (BODY_HW + 1.2, -BODY_HH - 0.2)   # off the top right of the body, clear of the keys
 DOT_R, DOT_GAP = 3.4, 1.5
 YELLOW = (255, 204, 0)
 
 
 def render_color(inside, rgb):
-    """非模板彩色图标:机身用 rgb,右上角带黄点。画布尺寸与模板图标完全相同,所以切换时位置不会变。"""
+    """Non-template color icon, body in rgb with a yellow dot at the top right.
+    The canvas size is identical to the template icons, so nothing shifts when switching."""
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     px = img.load()
     total = SS * SS
@@ -86,7 +91,7 @@ def render_color(inside, rgb):
                     if d < 0:
                         nd += 1
                     elif d < DOT_GAP:
-                        pass  # 空隙
+                        pass  # the gap
                     elif inside(x, y):
                         ng += 1
             n = ng + nd
@@ -109,17 +114,17 @@ def render_template(inside):
     return img
 
 
-# ---------- App 图标 ----------
+# ---------- App icon ----------
 def app_icon(size=1024):
-    S = size * 2  # 2x 超采样后再缩小
+    S = size * 2  # supersample at 2x, then scale down
 
-    # 超椭圆(squircle)遮罩
+    # Squircle mask
     ys, xs = np.mgrid[0:S, 0:S].astype(np.float32)
     nx, ny = (xs - S / 2) / (S / 2 * 0.98), (ys - S / 2) / (S / 2 * 0.98)
     mask = (np.abs(nx) ** 5 + np.abs(ny) ** 5 <= 1.0)
     mask_img = Image.fromarray((mask * 255).astype(np.uint8))
 
-    # 背景:纵向深色渐变 + 顶部微弱高光
+    # Background: dark vertical gradient plus a faint highlight at the top
     t = np.linspace(0, 1, S, dtype=np.float32)[:, None]
     top, bot = np.array([62, 68, 84], np.float32), np.array([20, 22, 28], np.float32)
     grad = top[None, None, :] * (1 - t[..., None]) + bot[None, None, :] * t[..., None]
@@ -129,7 +134,7 @@ def app_icon(size=1024):
     bg = Image.fromarray(grad).convert("RGBA")
     bg.putalpha(mask_img)
 
-    # 图形:亮色机身 + 深色按键 + 带蓝点的旋钮。整体缩放,四周留出 macOS 图标应有的留白
+    # Artwork: light body, dark keys, and a knob with a blue dot. Scaled down overall to leave the margin that macOS icons are expected to have
     f = S / 36.0 * 0.74
     g = ImageDraw.Draw(bg)
 
