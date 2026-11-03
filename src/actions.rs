@@ -8,6 +8,7 @@ use anyhow::{anyhow, bail, Result};
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 
 use crate::config::{Binding, BindingDetail};
+use crate::i18n::Msg;
 
 /// 解析后的一次系统动作
 #[derive(Debug, Clone)]
@@ -51,13 +52,13 @@ pub fn resolve(binding: &Binding) -> Result<Resolved> {
             "volume_down" => Key::VolumeDown,
             "mute" => Key::VolumeMute,
             "play_pause" => Key::MediaPlayPause,
-            other => bail!("未知媒体键 `{other}`"),
+            other => bail!("{}", Msg::UnknownMedia(other.to_string()).text()),
         };
         r.on_press = Some(Action::Click(vec![], key));
     } else if let Some(cmd) = &d.shell {
         r.on_press = Some(Action::Shell(cmd.clone()));
     } else {
-        bail!("绑定里没有 key / hold / media / shell 任何一项");
+        bail!("{}", Msg::EmptyBinding.text());
     }
     Ok(r)
 }
@@ -65,7 +66,9 @@ pub fn resolve(binding: &Binding) -> Result<Resolved> {
 /// "cmd+shift+4" → ([Meta, Shift], Unicode('4'))
 pub fn parse_shortcut(s: &str) -> Result<(Vec<Key>, Key)> {
     let parts: Vec<String> = s.split('+').map(|p| p.trim().to_lowercase()).collect();
-    let (last, mods) = parts.split_last().ok_or_else(|| anyhow!("空快捷键"))?;
+    let (last, mods) = parts
+        .split_last()
+        .ok_or_else(|| anyhow!(Msg::EmptyShortcut.text()))?;
     let mut mod_keys = Vec::new();
     for m in mods {
         mod_keys.push(match m.as_str() {
@@ -73,12 +76,12 @@ pub fn parse_shortcut(s: &str) -> Result<(Vec<Key>, Key)> {
             "ctrl" | "control" => Key::Control,
             "alt" | "option" | "opt" => Key::Alt,
             "shift" => Key::Shift,
-            other => bail!("未知修饰键 `{other}`"),
+            other => bail!("{}", Msg::UnknownModifier(other.to_string()).text()),
         });
     }
     Ok((
         mod_keys,
-        parse_key(last).ok_or_else(|| anyhow!("未知按键 `{last}`"))?,
+        parse_key(last).ok_or_else(|| anyhow!(Msg::UnknownKey(last.to_string()).text()))?,
     ))
 }
 
@@ -163,7 +166,7 @@ pub fn spawn_executor(
                     on_trust(ok);
                 }
                 if let Err(e) = run(&mut enigo, &action) {
-                    eprintln!("[动作失败] {action:?}: {e}");
+                    eprintln!("[action failed] {action:?}: {e}");
                 }
             }
         })?;
@@ -172,7 +175,7 @@ pub fn spawn_executor(
 
 fn run(enigo: &mut Option<Enigo>, action: &Action) -> Result<()> {
     let Some(enigo) = enigo else {
-        bail!("没有「辅助功能」权限,动作已丢弃");
+        bail!("Accessibility permission is missing, action dropped");
     };
     match action {
         Action::Click(mods, key) => {

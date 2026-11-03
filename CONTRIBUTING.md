@@ -47,13 +47,18 @@ printf '#!/bin/sh\nexec scripts/ci.sh\n' > .git/hooks/pre-push && chmod +x .git/
 - Anything that needs an administrator password (driver install) must ask first, in plain words, and be reversible.
 - Do not add network access. Vibar talks to a keyboard and to your system, nothing else.
 
-## Language
+## Language and translations
 
-The interface is Chinese for now, and the code comments are mostly Chinese. English and Chinese are both fine in comments, issues and pull requests; docs are English with a Chinese README. Adding a real localization layer is a welcome, larger contribution: open an issue to agree on the approach before you start, because the settings page and the menu both need strings.
+Docs are English with a Chinese README. The interface comes in English and Chinese, chosen by `language` in the config (`auto` follows macOS). All user-visible text is in two places, and tests keep the languages in step:
+
+- `src/i18n.rs` for the menu, status lines, notices and dialogs
+- `ui/strings.json` for the settings window
+
+Comments, logs, issues and pull requests may be English or Chinese; English is preferred for new code. To add a third language: add a `Lang` variant and a `code`, a third `match` arm set in `Msg`, a third block in `ui/strings.json`, teach `i18n::resolve` and `system_lang` about it, add an `.lproj` folder in `scripts/bundle.sh` and an option in the page's language list. Open an issue first so we agree on the language code and who maintains it.
 
 ## Reporting hardware results
 
-Other firmware versions, Intel Macs and a second computer are the biggest unknowns. In an issue include: macOS version and chip, keyboard firmware (shown in Settings → 键盘), what you did, and the output of:
+Other firmware versions, Intel Macs and a second computer are the biggest unknowns. In an issue include: macOS version and chip, keyboard firmware (shown in Settings → Keyboard), what you did, and the output of:
 
 ```bash
 open -n --stdout /tmp/vibar.out --stderr /tmp/vibar.err build/Vibar.app && sleep 20 && cat /tmp/vibar.out

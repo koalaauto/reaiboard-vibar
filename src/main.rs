@@ -14,6 +14,7 @@ mod autostart;
 mod config;
 mod coreaudio;
 mod daemon;
+mod i18n;
 mod mic;
 mod settings;
 mod ui;
@@ -22,6 +23,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use daemon::{Bindings, Command, Status};
+use i18n::Msg;
 use ui::{Handlers, UiEvent};
 
 fn main() -> anyhow::Result<()> {
@@ -54,32 +56,41 @@ fn main() -> anyhow::Result<()> {
         for i in 0..secs {
             let id = coreaudio::find_device(reai_board_sdk::virtual_mic::DEVICE_NAME);
             let running = id.and_then(coreaudio::is_running_somewhere);
-            println!("[{i}s] 设备 id={id:?} 正被使用={running:?}");
+            println!("[{i}s] device id={id:?} running={running:?}");
             std::thread::sleep(Duration::from_secs(1));
         }
         return Ok(());
     }
 
     config::migrate_legacy();
+    // Language first, so that everything reported below is in the right language.
+    i18n::set(i18n::resolve(config::peek_language().as_deref()));
     let _lock = single_instance()?;
 
-    // 启动时配置坏了也不能退出:退回内置默认,并在菜单里提示
+    // A broken config at startup must not stop the app: fall back to the built-in defaults and say so in the menu.
     let (cfg, map, startup_notice) = match daemon::load_bindings() {
         Ok((cfg, map, bad)) => {
-            let note = bad.first().map(|b| format!("{} 项配置无效,{b}", bad.len()));
+            let note = bad.first().map(|first| {
+                Msg::ConfigInvalid {
+                    count: bad.len(),
+                    first: first.clone(),
+                }
+                .text()
+            });
             (cfg, map, note)
         }
         Err(e) => {
-            eprintln!("[配置] {e:#}");
-            let default = config::parse(config::DEFAULT_CONFIG).expect("内置默认配置必须有效");
+            eprintln!("[config] {e:#}");
+            let default = config::parse(config::DEFAULT_CONFIG)
+                .expect("the built-in default config must be valid");
             let (cfg, map, _) = daemon::resolve_all(default);
-            (cfg, map, Some(format!("{e},已使用默认设置")))
+            (cfg, map, Some(Msg::UsingDefaults(e.to_string()).text()))
         }
     };
     println!(
-        "已加载 {} 个绑定{}",
+        "Loaded {} bindings{}",
         map.count(),
-        if dry_run { "(dry-run)" } else { "" }
+        if dry_run { " (dry-run)" } else { "" }
     );
     let bindings: Bindings = Arc::new(RwLock::new(map));
     let device_name = cfg.device.clone();
@@ -91,7 +102,7 @@ fn main() -> anyhow::Result<()> {
         let sent = std::sync::atomic::AtomicBool::new(false);
         let status: Arc<dyn Fn(Status) + Send + Sync> = Arc::new(move |s| {
             if let Status::Error(m) = &s {
-                eprintln!("[错误] {m}");
+                eprintln!("[error] {m}");
             }
             if let (
                 true,
@@ -102,13 +113,13 @@ fn main() -> anyhow::Result<()> {
             ) = (one_shot, &s)
             {
                 if !sent.swap(true, std::sync::atomic::Ordering::SeqCst) {
-                    println!("当前:已连接 {connected}s / 断开后 {disconnected}s,写入新值...");
+                    println!("Current: connected {connected}s, disconnected {disconnected}s, writing the new value...");
                     let _ = cmd_tx.send(Command::SetSleep {
                         connected: set_conn,
                         disconnected: set_disc,
                     });
                 } else {
-                    println!("生效:已连接 {connected}s / 断开后 {disconnected}s");
+                    println!("Effective: connected {connected}s, disconnected {disconnected}s");
                     std::process::exit(0);
                 }
             }
@@ -160,7 +171,7 @@ fn main() -> anyhow::Result<()> {
             let exec = actions::spawn_executor(dry_run, move |ok| {
                 let _ = p.lock().unwrap().send_event(UiEvent::Trusted(ok));
             })
-            .expect("启动动作线程失败");
+            .expect("failed to start the actions thread");
 
             let status: Arc<dyn Fn(Status) + Send + Sync> = Arc::new(move |s| {
                 let _ = proxy.lock().unwrap().send_event(UiEvent::Status(s));
@@ -191,17 +202,18 @@ fn main() -> anyhow::Result<()> {
                         status.clone(),
                         cmd_rx,
                     )) {
-                        eprintln!("[致命] {e:#}");
+                        eprintln!("[fatal] {e:#}");
                         status(Status::Error(e.to_string()));
                     }
                 })
-                .expect("启动后台线程失败");
+                .expect("failed to start the daemon thread");
         },
         handlers,
     )
 }
 
-/// 配置文件保存即生效:每秒看一次修改时间。写错了只提示,继续沿用旧配置。
+/// A saved config file takes effect right away: check its modification time once a second.
+/// A broken file is only reported and the previous settings stay in force.
 fn watch_config(bindings: Bindings, proxy: Arc<Mutex<ui::Proxy>>) {
     let path = config::config_path();
     let mtime = move || std::fs::metadata(&path).and_then(|m| m.modified()).ok();
@@ -215,24 +227,35 @@ fn watch_config(bindings: Bindings, proxy: Arc<Mutex<ui::Proxy>>) {
                 continue;
             }
             last = now;
+            // Language first, so the notice below is in the new language.
+            let language_changed = i18n::set(i18n::resolve(config::peek_language().as_deref()));
             let msg = match daemon::load_bindings() {
                 Ok((_, map, bad)) => {
                     let n = map.count();
                     *bindings.write().unwrap() = map;
                     match bad.first() {
-                        None => format!("配置已更新,共 {n} 项"),
-                        Some(first) => format!("已更新,但 {} 项无效,{first}", bad.len()),
+                        None => Msg::ConfigUpdated(n).text(),
+                        Some(first) => Msg::ConfigUpdatedWithInvalid {
+                            count: bad.len(),
+                            first: first.clone(),
+                        }
+                        .text(),
                     }
                 }
-                Err(e) => format!("{e},仍用旧设置"),
+                Err(e) => Msg::KeepingPrevious(e.to_string()).text(),
             };
-            println!("[配置] {msg}");
-            let _ = proxy.lock().unwrap().send_event(UiEvent::Notice(msg));
+            println!("[config] {msg}");
+            let proxy = proxy.lock().unwrap();
+            if language_changed {
+                let _ = proxy.send_event(UiEvent::LanguageChanged);
+            }
+            let _ = proxy.send_event(UiEvent::Notice(msg));
         })
-        .expect("启动配置监视线程失败");
+        .expect("failed to start the config watcher thread");
 }
 
-/// 单实例锁:两个实例会抢同一块键盘。返回的文件句柄要一直持有。
+/// Single-instance lock: two instances would fight over the same keyboard.
+/// The returned handle must be kept alive.
 fn single_instance() -> anyhow::Result<std::fs::File> {
     use std::os::fd::AsRawFd;
     let path = config::config_path().with_file_name("vibar.lock");
@@ -245,7 +268,7 @@ fn single_instance() -> anyhow::Result<std::fs::File> {
         .write(true)
         .open(&path)?;
     if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-        anyhow::bail!("Vibar 已经在运行,两个实例会抢同一块键盘");
+        anyhow::bail!("Vibar is already running, two instances would fight over the keyboard");
     }
     Ok(f)
 }

@@ -20,7 +20,7 @@ There is no GitHub Actions workflow on purpose. `scripts/ci.sh` is the CI. Run i
 
 ## Map
 
-`src/daemon.rs` Bluetooth session and key handling. `src/config.rs` config model. `src/actions.rs` key simulation. `src/mic.rs` and `src/coreaudio.rs` microphone. `src/ui.rs` menu bar. `src/settings.rs` and `ui/settings.html` settings window. Details and extension recipes are in `docs/architecture.md`.
+`src/daemon.rs` Bluetooth session and key handling. `src/config.rs` config model. `src/actions.rs` key simulation. `src/mic.rs` and `src/coreaudio.rs` microphone. `src/ui.rs` menu bar. `src/settings.rs`, `ui/settings.html` and `ui/strings.json` settings window. `src/i18n.rs` languages and Rust-side messages. Details and extension recipes are in `docs/architecture.md`.
 
 ## Invariants. Do not break these
 
@@ -28,7 +28,7 @@ There is no GitHub Actions workflow on purpose. `scripts/ci.sh` is the CI. Run i
 2. **The only write to the keyboard is the sleep time**, on explicit user action, and skipped when unchanged. Never add key configuration, DFU, factory or shutdown commands.
 3. **Menu items and the web view are touched only from the main thread**, through `UiEvent`. Update a menu item only when its content changed (`ui::put`); changing an open menu closes it.
 4. **The settings page never saves an empty shortcut, hold key or command.** It keeps a draft.
-5. **UI strings have no parentheses and no colons.** A unit test enforces this for the settings page; keep menu strings in `ui.rs` to the same rule. See `docs/design-principles.md`.
+5. **Every user-visible string goes through the catalog, in both languages.** Rust side: a `Msg` variant in `src/i18n.rs` (both `en` and `zh`). Settings page: a key in `ui/strings.json` (both languages), never text in `settings.html`. No parentheses and no colons in any string. Logs and panics are plain English. Tests enforce all of this. See `docs/design-principles.md`.
 6. **Icons come from `scripts/make-icons.py`.** Edit the script, regenerate, commit both.
 7. **The repository URL lives only in `Cargo.toml`.** Rust reads `env!("CARGO_PKG_REPOSITORY")`, the page and bundle script read it from there.
 8. **The sink for microphone audio is installed before the SDK `start()`.**
@@ -52,4 +52,4 @@ There is no GitHub Actions workflow on purpose. `scripts/ci.sh` is the CI. Run i
 
 ## Style
 
-Rust 2021, `rustfmt` defaults, clippy clean with `-D warnings`. Comments explain why, not what. Code comments are mostly Chinese today; match the surrounding file. Keep functions small, prefer pure functions that can be unit tested (see `config.rs` and `Keymap`) and keep platform calls at the edges.
+Rust 2021, `rustfmt` defaults, clippy clean with `-D warnings`. Comments explain why, not what. Write new comments in English. Keep functions small, prefer pure functions that can be unit tested (see `config.rs` and `Keymap`) and keep platform calls at the edges.

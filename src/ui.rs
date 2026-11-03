@@ -17,6 +17,7 @@ use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Sub
 use tray_icon::{Icon, TrayIconBuilder};
 
 use crate::daemon::Status;
+use crate::i18n::Msg;
 use crate::settings::{self, SettingsWindow, Snapshot};
 
 pub const APP_NAME: &str = "Vibar";
@@ -31,6 +32,8 @@ pub enum UiEvent {
     Menu(MenuId),
     /// 设置窗口里的网页发来的消息
     Settings(String),
+    /// The interface language changed (settings window or config file).
+    LanguageChanged,
 }
 
 pub type Proxy = EventLoopProxy<UiEvent>;
@@ -158,22 +161,122 @@ fn put(item: &MenuItem, text: impl AsRef<str>) {
     }
 }
 
+/// What a menu line shows. Kept as a message, not as text, so that a language change can redraw it.
+#[derive(Clone)]
+enum Line {
+    Msg(Msg),
+    Raw(String),
+}
+
+impl Line {
+    fn text(&self) -> String {
+        match self {
+            Line::Msg(m) => m.text(),
+            Line::Raw(s) => s.clone(),
+        }
+    }
+}
+
+/// The tray menu items and what they currently show.
+struct MenuUi {
+    status_item: MenuItem,
+    detail_item: MenuItem,
+    trust_item: MenuItem,
+    release_item: MenuItem,
+    settings_item: MenuItem,
+    about_item: MenuItem,
+    quit_item: MenuItem,
+    status_line: Line,
+    detail_line: Line,
+}
+
+impl MenuUi {
+    fn new() -> Self {
+        let q = Some(Accelerator::new(Modifiers::META, Code::KeyQ));
+        Self {
+            status_item: MenuItem::new(Msg::Starting.text(), false, None),
+            detail_item: MenuItem::new("", false, None),
+            trust_item: MenuItem::new(Msg::AccessibilityNeeded.text(), true, None),
+            release_item: MenuItem::new(Msg::DisconnectKeyboard.text(), false, None),
+            settings_item: MenuItem::new(
+                Msg::SettingsMenu.text(),
+                true,
+                Some(Accelerator::new(Modifiers::META, Code::Comma)),
+            ),
+            about_item: MenuItem::new(Msg::About.text(), true, None),
+            quit_item: MenuItem::new(Msg::Quit.text(), true, q),
+            status_line: Line::Msg(Msg::Starting),
+            detail_line: Line::Raw(String::new()),
+        }
+    }
+
+    fn set_status(&mut self, m: Msg) {
+        self.status_line = Line::Msg(m);
+        put(&self.status_item, self.status_line.text());
+    }
+
+    fn set_detail(&mut self, l: Line) {
+        self.detail_line = l;
+        put(&self.detail_item, self.detail_line.text());
+    }
+
+    /// Redraw every line in the current language.
+    fn relocalize(&self, released: bool) {
+        put(&self.status_item, self.status_line.text());
+        put(&self.detail_item, self.detail_line.text());
+        put(&self.trust_item, Msg::AccessibilityNeeded.text());
+        put(
+            &self.release_item,
+            if released {
+                Msg::ConnectKeyboard
+            } else {
+                Msg::DisconnectKeyboard
+            }
+            .text(),
+        );
+        put(&self.settings_item, Msg::SettingsMenu.text());
+        put(&self.about_item, Msg::About.text());
+        put(&self.quit_item, Msg::Quit.text());
+    }
+}
+
 /// 设置窗口打开时应用会切成普通应用,这时需要一个标准的主菜单,复制粘贴、关闭窗口等快捷键才有效
-fn install_main_menu() {
-    let build = || -> Result<Menu, tray_icon::menu::Error> {
+/// Handles to the main menu items whose titles we own, so they can follow the language.
+struct MainMenu {
+    app: Submenu,
+    about: PredefinedMenuItem,
+    quit: PredefinedMenuItem,
+    edit: Submenu,
+    window: Submenu,
+}
+
+impl MainMenu {
+    fn relocalize(&self) {
+        self.about.set_text(Msg::About.text());
+        self.quit.set_text(Msg::Quit.text());
+        self.edit.set_text(Msg::EditMenu.text());
+        self.window.set_text(Msg::WindowMenu.text());
+        let _ = &self.app; // the app menu title is the app name and never changes
+    }
+}
+
+fn install_main_menu() -> Option<MainMenu> {
+    let about = PredefinedMenuItem::about(Some(&Msg::About.text()), None);
+    let quit = PredefinedMenuItem::quit(Some(&Msg::Quit.text()));
+    let build = || -> Result<(Menu, MainMenu), tray_icon::menu::Error> {
         let app = Submenu::with_items(
             APP_NAME,
             true,
             &[
-                &PredefinedMenuItem::about(Some(&format!("关于 {APP_NAME}")), None),
+                &about,
                 &PredefinedMenuItem::separator(),
                 &PredefinedMenuItem::hide(None),
                 &PredefinedMenuItem::separator(),
-                &PredefinedMenuItem::quit(Some(&format!("退出 {APP_NAME}"))),
+                &quit,
             ],
         )?;
         let edit = Submenu::with_items(
-            "编辑",
+            Msg::EditMenu.text(),
             true,
             &[
                 &PredefinedMenuItem::undo(None),
@@ -186,30 +289,40 @@ fn install_main_menu() {
             ],
         )?;
         let window = Submenu::with_items(
-            "窗口",
+            Msg::WindowMenu.text(),
             true,
             &[
                 &PredefinedMenuItem::minimize(None),
                 &PredefinedMenuItem::close_window(None),
             ],
         )?;
-        Menu::with_items(&[&app, &edit, &window])
+        let menu = Menu::with_items(&[&app, &edit, &window])?;
+        Ok((
+            menu,
+            MainMenu {
+                app,
+                about: about.clone(),
+                quit: quit.clone(),
+                edit,
+                window,
+            },
+        ))
     };
-    if let Ok(menu) = build() {
-        menu.init_for_nsapp();
-        std::mem::forget(menu); // 主菜单要一直存在
-    }
+    let (menu, handles) = build().ok()?;
+    menu.init_for_nsapp();
+    std::mem::forget(menu); // the main menu must live as long as the app
+    Some(handles)
 }
 
 /// 解码内置的 PNG 图标,由 scripts/make-icons.py 生成
 fn load_icon(png_bytes: &[u8]) -> Icon {
     let mut reader = png::Decoder::new(Cursor::new(png_bytes))
         .read_info()
-        .expect("图标 PNG 无效");
-    let mut buf = vec![0; reader.output_buffer_size().expect("图标尺寸")];
-    let info = reader.next_frame(&mut buf).expect("图标解码失败");
+        .expect("invalid icon PNG");
+    let mut buf = vec![0; reader.output_buffer_size().expect("icon size")];
+    let info = reader.next_frame(&mut buf).expect("icon decode failed");
     buf.truncate(info.buffer_size());
-    Icon::from_rgba(buf, info.width, info.height).expect("图标数据无效")
+    Icon::from_rgba(buf, info.width, info.height).expect("invalid icon data")
 }
 
 pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
@@ -228,36 +341,21 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
     let voice_dark = load_icon(include_bytes!("../assets/menubar-voice-dark.png"));
     let voice_light = load_icon(include_bytes!("../assets/menubar-voice-light.png"));
 
-    // ---- 菜单 ----
-    let status_item = MenuItem::new("正在启动…", false, None);
-    let detail_item = MenuItem::new("", false, None);
-    let trust_item = MenuItem::new("需要辅助功能权限…", true, None);
-    let release_item = MenuItem::new("断开键盘", false, None);
-    let settings_item = MenuItem::new(
-        "设置…",
-        true,
-        Some(Accelerator::new(Modifiers::META, Code::Comma)),
-    );
-    let about_item = MenuItem::new(format!("关于 {APP_NAME}"), true, None);
-    let quit_item = MenuItem::new(
-        format!("退出 {APP_NAME}"),
-        true,
-        Some(Accelerator::new(Modifiers::META, Code::KeyQ)),
-    );
-
+    // ---- Tray menu ----
+    let mut mu = MenuUi::new();
     let menu = Menu::new();
     menu.append_items(&[
-        &status_item,
-        &detail_item,
+        &mu.status_item,
+        &mu.detail_item,
         &PredefinedMenuItem::separator(),
-        &release_item,
-        &settings_item,
-        &about_item,
+        &mu.release_item,
+        &mu.settings_item,
+        &mu.about_item,
         &PredefinedMenuItem::separator(),
-        &quit_item,
+        &mu.quit_item,
     ])
-    .expect("构建菜单失败");
-    // 权限行只在缺权限时插到分隔线之后,授权后移除
+    .expect("failed to build the menu");
+    // The permission row is inserted after the separator only while a permission is missing.
     const TRUST_POS: usize = 3;
     let mut trust_shown = false;
 
@@ -266,7 +364,7 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
         .with_tooltip(format!("{APP_NAME} · ReAI Vibe Board"))
         .with_icon_templated(icon_off.clone())
         .build()
-        .expect("创建菜单栏图标失败");
+        .expect("failed to create the menu bar item");
 
     // 点击状态栏图标时先把本应用激活再弹菜单。
     // 菜单是在嵌套事件循环里显示的,应用不是前台时第一次点击弹出的菜单会被立刻收起。
@@ -281,11 +379,11 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
         }
     }));
 
-    install_main_menu();
+    let main_menu = install_main_menu();
     start(proxy);
     // 调试用:启动后直接打开设置窗口
     if std::env::args().any(|a| a == "--open-settings") {
-        let _ = window_proxy.send_event(UiEvent::Menu(settings_item.id().clone()));
+        let _ = window_proxy.send_event(UiEvent::Menu(mu.settings_item.id().clone()));
     }
 
     let mut icons = Icons {
@@ -324,25 +422,25 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
             UiEvent::Status(s) => {
                 match s {
                     Status::Searching => {
-                        put(&status_item, "正在搜索键盘…");
-                        put(&detail_item, "按任意键唤醒键盘");
+                        mu.set_status(Msg::Searching);
+                        mu.set_detail(Line::Msg(Msg::WakeHint));
                         snap.connected = false;
                         icons.set_base(false, &tray);
                     }
                     Status::Connecting => {
-                        release_item.set_enabled(true);
+                        mu.release_item.set_enabled(true);
                         snap.known = true;
-                        put(&status_item, "正在连接…");
-                        put(&detail_item, "");
+                        mu.set_status(Msg::Connecting);
+                        mu.set_detail(Line::Raw(String::new()));
                     }
                     Status::Connected => {
-                        put(&status_item, "已连接");
-                        put(&detail_item, "正在读取设备信息…");
+                        mu.set_status(Msg::Connected);
+                        mu.set_detail(Line::Msg(Msg::ReadingInfo));
                         snap.connected = true;
                         icons.set_base(true, &tray);
                     }
                     Status::Info { firmware, battery } => {
-                        put(&detail_item, format!("电量 {battery}%"));
+                        mu.set_detail(Line::Msg(Msg::Battery(battery)));
                         snap.battery = Some(battery);
                         snap.firmware = Some(firmware);
                     }
@@ -352,17 +450,20 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
                         snap.mic_installed = installed;
                     }
                     Status::Disconnected => {
-                        put(&status_item, "已断开");
-                        put(&detail_item, "等待重新连接…");
+                        mu.set_status(Msg::Disconnected);
+                        mu.set_detail(Line::Msg(Msg::WaitingReconnect));
                         snap.connected = false;
                         icons.set_base(false, &tray);
                     }
                     Status::Released(on) => {
                         snap.released = on;
-                        put(&release_item, if on { "连接键盘" } else { "断开键盘" });
+                        put(
+                            &mu.release_item,
+                            if on { Msg::ConnectKeyboard } else { Msg::DisconnectKeyboard }.text(),
+                        );
                         if on {
-                            put(&status_item, "已断开");
-                            put(&detail_item, "别的电脑现在可以连接键盘");
+                            mu.set_status(Msg::Disconnected);
+                            mu.set_detail(Line::Msg(Msg::OthersCanConnect));
                             snap.connected = false;
                             icons.set_base(false, &tray);
                         }
@@ -387,7 +488,7 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
                         if let Some(w) = &settings {
                             w.post(&json!({ "t": "notice", "text": m }));
                         }
-                        put(&detail_item, m);
+                        mu.set_detail(Line::Raw(m));
                     }
                 }
                 if let Some(w) = settings.as_mut() {
@@ -398,25 +499,25 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
                 if let Some(w) = &settings {
                     w.post(&json!({ "t": "notice", "text": m }));
                 }
-                put(&detail_item, m);
+                mu.set_detail(Line::Raw(m));
             }
             UiEvent::Trusted(ok) => {
                 if !ok && !trust_shown {
-                    let _ = menu.insert(&trust_item, TRUST_POS);
+                    let _ = menu.insert(&mu.trust_item, TRUST_POS);
                     trust_shown = true;
                 } else if ok && trust_shown {
-                    let _ = menu.remove(&trust_item);
+                    let _ = menu.remove(&mu.trust_item);
                     trust_shown = false;
                 }
             }
             UiEvent::Menu(id) => {
-                if id == *quit_item.id() {
+                if id == *mu.quit_item.id() {
                     std::process::exit(0);
-                } else if id == *release_item.id() {
+                } else if id == *mu.release_item.id() {
                     (handlers.set_released)(!snap.released);
-                } else if id == *about_item.id() {
+                } else if id == *mu.about_item.id() {
                     show_about();
-                } else if id == *settings_item.id() {
+                } else if id == *mu.settings_item.id() {
                     if let Some(w) = &settings {
                         w.focus();
                     } else {
@@ -426,19 +527,28 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
                             Ok(w) => settings = Some(w),
                             Err(e) => {
                                 target.set_activation_policy_at_runtime(ActivationPolicy::Accessory);
-                                put(&detail_item, format!("打不开设置窗口,{e}"));
+                                mu.set_detail(Line::Raw(Msg::CannotOpenSettings(e.to_string()).text()));
                             }
                         }
                     }
                     activate_app();
-                } else if id == *trust_item.id() {
+                } else if id == *mu.trust_item.id() {
                     let _ = std::process::Command::new("open")
                         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
                         .spawn();
                 }
             }
             UiEvent::Settings(text) => {
-                handle_settings_message(&text, &mut settings, &mut snap, &handlers);
+                handle_settings_message(&text, &mut settings, &mut snap, &handlers, &window_proxy);
+            }
+            UiEvent::LanguageChanged => {
+                mu.relocalize(snap.released);
+                if let Some(m) = &main_menu {
+                    m.relocalize();
+                }
+                if let Some(w) = settings.as_mut() {
+                    w.relocalize();
+                }
             }
         }
     })
@@ -450,6 +560,7 @@ fn handle_settings_message(
     settings: &mut Option<SettingsWindow>,
     snap: &mut Snapshot,
     handlers: &Handlers,
+    proxy: &Proxy,
 ) {
     let Ok(msg) = serde_json::from_str::<Value>(text) else {
         return;
@@ -461,8 +572,13 @@ fn handle_settings_message(
             w.push_state(snap);
         }
         "save" => match settings::save(msg["config"].clone()) {
-            Ok(bad) => w.post(&json!({ "t": "saved", "warnings": bad })),
-            Err(e) => eprintln!("[设置] 保存失败 {e}"),
+            Ok(saved) => {
+                w.post(&json!({ "t": "saved", "warnings": saved.warnings }));
+                if saved.language_changed {
+                    let _ = proxy.send_event(UiEvent::LanguageChanged);
+                }
+            }
+            Err(e) => eprintln!("[settings] save failed: {e}"),
         },
         "sleep" => {
             if let Some(secs) = msg["secs"].as_u64().and_then(|s| u16::try_from(s).ok()) {
@@ -475,7 +591,7 @@ fn handle_settings_message(
         "autostart" => {
             let want = msg["on"].as_bool().unwrap_or(false);
             if let Err(e) = crate::autostart::set_enabled(want) {
-                eprintln!("[设置] 开机启动 {e}");
+                eprintln!("[settings] launch at login: {e}");
             }
             snap.autostart = crate::autostart::enabled();
             w.push_state(snap);

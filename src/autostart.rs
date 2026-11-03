@@ -58,14 +58,15 @@ fn render_plist(exe: &Path) -> String {
 pub fn set_enabled(on: bool) -> Result<()> {
     let path = plist_path();
     if on {
-        let exe = std::env::current_exe().context("找不到当前程序路径")?;
+        let exe = std::env::current_exe().context("could not find the current executable path")?;
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
         std::fs::write(&path, render_plist(&exe))
-            .with_context(|| format!("写入 {} 失败", path.display()))?;
+            .with_context(|| format!("could not write {}", path.display()))?;
     } else if path.exists() {
-        std::fs::remove_file(&path).with_context(|| format!("删除 {} 失败", path.display()))?;
+        std::fs::remove_file(&path)
+            .with_context(|| format!("could not remove {}", path.display()))?;
     }
     Ok(())
 }

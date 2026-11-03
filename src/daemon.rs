@@ -12,6 +12,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 
 use crate::actions::{Action, Resolved};
 use crate::config;
+use crate::i18n::Msg;
 use crate::mic::{self, InstallOutcome, MicCtl, MicState};
 
 /// 拨杆某一档解析好的绑定
@@ -106,14 +107,21 @@ fn resolve_one(label: &str, b: &config::Binding, bad: &mut Vec<String>) -> Optio
     match crate::actions::resolve(b) {
         Ok(r) => Some(r),
         Err(e) => {
-            eprintln!("[配置] 绑定 `{label}` 无效 {e}");
-            bad.push(format!("{label} {e}"));
+            eprintln!("[config] binding `{label}` is invalid: {e}");
+            bad.push(
+                Msg::InvalidEntry {
+                    label: label.to_string(),
+                    reason: e.to_string(),
+                }
+                .text(),
+            );
             None
         }
     }
 }
 
-/// 把配置里的每一项解析成动作。无效的不丢弃信息,而是记入说明,由界面告诉用户
+/// Resolve every config entry into actions. Invalid entries are not dropped silently: each one
+/// becomes a message that the UI shows to the user.
 pub fn resolve_all(cfg: config::Config) -> (config::Config, Keymap, Vec<String>) {
     let mut bad = Vec::new();
     let mut km = Keymap {
@@ -122,7 +130,7 @@ pub fn resolve_all(cfg: config::Config) -> (config::Config, Keymap, Vec<String>)
     };
     for (name, b) in &cfg.bindings {
         if !config::INPUTS.contains(&name.as_str()) {
-            bad.push(format!("{name} 不是键盘上的按键"));
+            bad.push(Msg::NotAnInput(name.clone()).text());
             continue;
         }
         if let Some(r) = resolve_one(name, b, &mut bad) {
@@ -131,27 +139,37 @@ pub fn resolve_all(cfg: config::Config) -> (config::Config, Keymap, Vec<String>)
     }
     for (mode, mc) in &cfg.modes {
         if !config::MODES.contains(&mode.as_str()) {
-            bad.push(format!("{mode} 不是拨杆的档位"));
+            bad.push(Msg::NotAMode(mode.clone()).text());
             continue;
         }
         let mut mm = ModeMap::default();
         for (name, b) in &mc.bindings {
             if !config::INPUTS.contains(&name.as_str()) {
-                bad.push(format!("{mode} 档的 {name} 不是键盘上的按键"));
+                let label = Msg::LabelInMode {
+                    mode: mode.clone(),
+                    name: name.clone(),
+                }
+                .text();
+                bad.push(Msg::NotAnInput(label).text());
                 continue;
             }
-            if let Some(r) = resolve_one(&format!("{mode} 档的 {name}"), b, &mut bad) {
+            let label = Msg::LabelInMode {
+                mode: mode.clone(),
+                name: name.clone(),
+            }
+            .text();
+            if let Some(r) = resolve_one(&label, b, &mut bad) {
                 mm.bindings.insert(name.clone(), r);
             }
         }
         mm.on_enter = mc
             .on_enter
             .as_ref()
-            .and_then(|b| resolve_one(&format!("{mode} 档进入时"), b, &mut bad));
+            .and_then(|b| resolve_one(&Msg::LabelOnEnter(mode.clone()).text(), b, &mut bad));
         mm.on_leave = mc
             .on_leave
             .as_ref()
-            .and_then(|b| resolve_one(&format!("{mode} 档离开时"), b, &mut bad));
+            .and_then(|b| resolve_one(&Msg::LabelOnLeave(mode.clone()).text(), b, &mut bad));
         km.modes.insert(mode.clone(), mm);
     }
     (cfg, km, bad)
@@ -172,7 +190,7 @@ pub async fn run(
     let meter = Arc::new(mic::Meter::default());
     match VirtualMic::start() {
         Ok(sink) => device.set_pcm_sink(Arc::new(mic::MeteredSink::new(sink, meter.clone()))),
-        Err(e) => eprintln!("[麦克风] 无法创建发送端:{e}"),
+        Err(e) => eprintln!("[mic] could not create the sender: {e}"),
     }
     device.start().await?;
 
@@ -181,14 +199,14 @@ pub async fn run(
         Some(n) => n,
         None => loop {
             status(Status::Searching);
-            println!("扫描 REAI_VB_ 设备...(键盘若在休眠,按一下任意键唤醒)");
+            println!("Scanning for REAI_VB_ devices... (press a key if the keyboard is asleep)");
             let found = device.scan_ble_devices(Duration::from_secs(6)).await?;
             if let Some(d) = found.first() {
                 break d.name.clone();
             }
         },
     };
-    println!("连接 {target} ...");
+    println!("Connecting to {target} ...");
     status(Status::Connecting);
     device.connect_ble(&target);
 
@@ -212,11 +230,11 @@ pub async fn run(
             outcome = install_rx.recv() => {
                 let Some(outcome) = outcome else { continue };
                 mic.set_installing(false);
-                println!("[麦克风] 安装结果:{outcome:?}");
+                println!("[mic] install result: {outcome:?}");
                 match outcome {
                     InstallOutcome::Installed => mic.set_enabled(true),
                     InstallOutcome::Cancelled => {}
-                    InstallOutcome::Failed(e) => status(Status::Error(format!("麦克风驱动安装失败,{e}"))),
+                    InstallOutcome::Failed(e) => status(Status::Error(Msg::MicInstallFailed(e).text())),
                 }
                 emit_mic(&mut mic, &*status);
             }
@@ -225,7 +243,7 @@ pub async fn run(
                 // 麦克风相关指令不需要键盘在线
                 match &cmd {
                     Command::SetMic(true) => {
-                        println!("[麦克风] 收到启用请求,驱动已安装={}", mic::is_installed());
+                        println!("[mic] enable requested, driver installed: {}", mic::is_installed());
                         if mic::is_installed() {
                             mic.set_enabled(true);
                         } else if !mic_is_busy(&mic) {
@@ -240,7 +258,7 @@ pub async fn run(
                         continue;
                     }
                     Command::SetMic(false) => {
-                        println!("[麦克风] 收到关闭请求");
+                        println!("[mic] disable requested");
                         mic.disable(&device).await;
                         emit_mic(&mut mic, &*status);
                         continue;
@@ -250,13 +268,13 @@ pub async fn run(
                         let status = status.clone();
                         tokio::task::spawn_blocking(move || {
                             if let Err(e) = mic::remove_driver() {
-                                status(Status::Error(format!("移除驱动失败,{e}")));
+                                status(Status::Error(Msg::MicRemoveFailed(e).text()));
                             }
                         });
                         continue;
                     }
                     Command::SetReleased(true) => {
-                        println!("[共用] 释放键盘");
+                        println!("[share] releasing the keyboard");
                         released = true;
                         device.set_auto_reconnect(false);
                         let _ = device.disconnect_ble().await;
@@ -267,7 +285,7 @@ pub async fn run(
                         continue;
                     }
                     Command::SetReleased(false) => {
-                        println!("[共用] 重新连接键盘");
+                        println!("[share] reconnecting to the keyboard");
                         released = false;
                         status(Status::Released(false));
                         status(Status::Connecting);
@@ -277,7 +295,7 @@ pub async fn run(
                     Command::SetSleep { .. } => {}
                 }
                 if !connected {
-                    status(Status::Error("键盘未连接,设置未写入".into()));
+                    status(Status::Error(Msg::KeyboardNotConnected.text()));
                     continue;
                 }
                 let (device, status) = (device.clone(), status.clone());
@@ -286,7 +304,7 @@ pub async fn run(
             evt = events.recv() => match evt {
                 Ok(Some(evt)) => match &evt {
                     BoardEvent::Connection(c) => {
-                        println!("[连接] connected={} {:?}", c.connected, c.connection_type);
+                        println!("[connection] connected={} {:?}", c.connected, c.connection_type);
                         last_mode = None;
                         connected = c.connected;
                         mic.set_connected(c.connected);
@@ -302,10 +320,10 @@ pub async fn run(
                                 tokio::time::sleep(Duration::from_millis(1500)).await;
                                 match device.get_sleep_timeout().await {
                                     Ok(t) => {
-                                        println!("[休眠] 已连接 {}s / 未连接 {}s", t.connected, t.disconnected);
+                                        println!("[sleep] connected {}s, disconnected {}s", t.connected, t.disconnected);
                                         status(Status::Sleep { connected: t.connected, disconnected: t.disconnected });
                                     }
-                                    Err(e) => eprintln!("[休眠] 读取失败:{e}"),
+                                    Err(e) => eprintln!("[sleep] read failed: {e}"),
                                 }
                             });
                         } else {
@@ -319,7 +337,7 @@ pub async fn run(
                         }
                     }
                     BoardEvent::DeviceInfo(d) => {
-                        println!("[设备] fw={} battery={}%", d.firmware_version, d.battery_level);
+                        println!("[device] fw={} battery={}%", d.firmware_version, d.battery_level);
                         status(Status::Info {
                             firmware: d.firmware_version.to_string(),
                             battery: d.battery_level,
@@ -328,7 +346,7 @@ pub async fn run(
                     BoardEvent::KeyPress(k) => {
                         let swap = bindings.read().unwrap().knob_swap;
                         if let Some(name) = config::key_name(k.key_index, swap) {
-                            println!("[按键] {name} pressed={}", k.pressed);
+                            println!("[key] {name} pressed={}", k.pressed);
                             if name == "voice" {
                                 status(Status::Voice(k.pressed));
                             }
@@ -352,7 +370,7 @@ pub async fn run(
                         let mode = m.mode.to_string().to_lowercase();
                         // 连接后的第一条是初始状态,不触发;之后只在真正变化时触发
                         if last_mode.as_deref().is_some_and(|prev| prev != mode) {
-                            println!("[拨杆] {mode}");
+                            println!("[lever] {mode}");
                             let km = bindings.read().unwrap();
                             let leave = last_mode.as_deref().and_then(|p| km.modes.get(p)).and_then(|m| m.on_leave.as_ref());
                             let enter = km.modes.get(&mode).and_then(|m| m.on_enter.as_ref());
@@ -365,11 +383,11 @@ pub async fn run(
                         status(Status::Mode(mode.clone()));
                         last_mode = Some(mode);
                     }
-                    BoardEvent::Error(e) => eprintln!("[错误] {}", e.message),
+                    BoardEvent::Error(e) => eprintln!("[error] {}", e.message),
                     _ => {}
                 },
                 Ok(None) => break,
-                Err(e) => eprintln!("[事件错误] {e:?}"),
+                Err(e) => eprintln!("[event error] {e:?}"),
             }
         }
     }
@@ -402,7 +420,7 @@ async fn handle_command(
             // 先读当前值,只改被指定的那一项;值没变就不写(设置会持久化到设备)
             let cur = match device.get_sleep_timeout().await {
                 Ok(t) => t,
-                Err(e) => return status(Status::Error(format!("读取休眠设置失败,{e}"))),
+                Err(e) => return status(Status::Error(Msg::SleepReadFailed(e.to_string()).text())),
             };
             let want = SleepTimeout::new(
                 disconnected.unwrap_or(cur.disconnected),
@@ -418,7 +436,7 @@ async fn handle_command(
             match device.set_sleep_timeout(want).await {
                 Ok(eff) => {
                     println!(
-                        "[休眠] 已设置:已连接 {}s / 未连接 {}s",
+                        "[sleep] set: connected {}s, disconnected {}s",
                         eff.connected, eff.disconnected
                     );
                     status(Status::Sleep {
@@ -426,7 +444,7 @@ async fn handle_command(
                         disconnected: eff.disconnected,
                     });
                 }
-                Err(e) => status(Status::Error(format!("设置休眠失败,{e}"))),
+                Err(e) => status(Status::Error(Msg::SleepSetFailed(e.to_string()).text())),
             }
         }
         // 麦克风指令已在主循环里处理
@@ -475,16 +493,19 @@ mod tests {
         assert!(dbg(Some("plan"), "enter").contains("Return"));
         assert!(
             dbg(Some("plan"), "enter").contains("Meta"),
-            "plan 档的 enter 应带 cmd"
+            "enter in PLAN should carry cmd"
         );
         assert!(
             !dbg(Some("chat"), "enter").contains("Meta"),
-            "chat 档沿用默认"
+            "CHAT keeps the default"
         );
-        assert!(!dbg(None, "enter").contains("Meta"), "没有档位信息时用默认");
+        assert!(
+            !dbg(None, "enter").contains("Meta"),
+            "without lever info the default applies"
+        );
         assert!(
             dbg(Some("plan"), "tab").contains("Tab"),
-            "plan 档没覆盖 tab,沿用默认"
+            "PLAN does not override tab, the default applies"
         );
     }
 
@@ -497,7 +518,7 @@ mod tests {
         assert!(bad.iter().any(|b| b.starts_with("tabb ")), "{bad:?}");
         assert!(bad.iter().any(|b| b.starts_with("turbo ")), "{bad:?}");
         assert!(
-            bad.iter().any(|b| b.starts_with("plan 档的 escc")),
+            bad.iter().any(|b| b.contains("escc") && b.contains("PLAN")),
             "{bad:?}"
         );
     }
@@ -512,7 +533,7 @@ mod tests {
     #[test]
     fn invalid_layer_entries_name_the_mode() {
         let (_, bad) = km("[bindings]\ntab = \"tab\"\n[modes.yolo.bindings]\nesc = \"nonsense\"\n");
-        assert!(bad[0].starts_with("yolo 档的 esc"), "{bad:?}");
+        assert!(bad[0].contains("esc") && bad[0].contains("YOLO"), "{bad:?}");
     }
 
     #[test]

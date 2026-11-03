@@ -1,6 +1,6 @@
 # Configuration
 
-The settings window reads and writes one file: `~/.config/vibar/config.toml`. Saving the file, from the window or by hand, takes effect within about a second. A broken file keeps the previous settings and the menu says which line is wrong. A missing file is created with the defaults.
+The settings window reads and writes one file: `~/.config/vibar/config.toml`. Set the environment variable `VIBAR_CONFIG` to a path to use another file instead, which is handy for testing without touching your real settings. Saving the file, from the window or by hand, takes effect within about a second. A broken file keeps the previous settings and the menu says which line is wrong. A missing file is created with the defaults.
 
 Old installs that used the name `reai-bar` are migrated from `~/.config/reai-bar/` on first start.
 
@@ -62,6 +62,7 @@ On connect, the first position report only records where the lever is. `on_enter
 
 | Key | Meaning |
 |---|---|
+| `language = "auto"` | interface language: `auto` follows the system, or `en`, or `zh-CN`. Changing it takes effect without a restart. |
 | `device = "REAI_VB_xxxxxxxx"` | connect to this keyboard instead of the first one found. Useful with several boards. |
 | `knob_swap = true` | swap the two knob directions. The settings window can set this by calibration. |
 

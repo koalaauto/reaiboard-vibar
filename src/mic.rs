@@ -13,6 +13,7 @@ use reai_board_sdk::{AudioStreamAction, AudioStreamScope, AudioTransport, BoardD
 use serde::{Deserialize, Serialize};
 
 use crate::coreaudio;
+use crate::i18n::Msg;
 
 const LEASE_ID: u32 = 0x5642_4152; // "VBAR"
 const LEASE_TTL_MS: u16 = 5_000;
@@ -156,12 +157,28 @@ fn bundled_driver() -> Option<PathBuf> {
     p.exists().then_some(p)
 }
 
-/// 先弹说明并征得同意,再安装驱动(系统会再弹管理员密码框)。阻塞调用。
+/// Escape text for an AppleScript string literal.
+fn applescript_escape(text: &str) -> String {
+    text.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+}
+
+/// The consent dialog shown before the driver is installed.
+fn consent_dialog_script() -> String {
+    format!(
+        "display dialog \"{text}\" with title \"{title}\" buttons {{\"{cancel}\", \"{install}\"}} default button \"{install}\" with icon note",
+        text = applescript_escape(&Msg::MicDialogText.text()),
+        title = applescript_escape(&Msg::MicDialogTitle.text()),
+        cancel = applescript_escape(&Msg::DialogCancel.text()),
+        install = applescript_escape(&Msg::DialogInstall.text()),
+    )
+}
+
+/// Ask for consent first, then install the driver (the system then asks for the administrator
+/// password). Blocks.
 pub fn install_with_consent() -> InstallOutcome {
-    let dialog = "display dialog \"Vibar 需要安装一个音频驱动,键盘的麦克风才会出现在系统的声音输入列表里。\\n\\n\
-· 需要输入管理员密码\\n\
-· 安装时系统声音会短暂中断一两秒\\n\
-· 随时可以在菜单里移除\" with title \"安装麦克风驱动\" buttons {\"取消\", \"安装\"} default button \"安装\" with icon note";
+    let dialog = consent_dialog_script();
     match std::process::Command::new("osascript")
         .arg("-e")
         .arg(dialog)
@@ -172,14 +189,16 @@ pub fn install_with_consent() -> InstallOutcome {
         Err(e) => return InstallOutcome::Failed(e.to_string()),
     }
     if let Some(path) = bundled_driver() {
-        // SDK 默认用编译期的绝对路径找驱动;指向包内自带的那份才可搬动
+        // The SDK looks for the driver at an absolute path baked in at build time. Point it at the
+        // copy inside the app bundle so the app can be moved.
         std::env::set_var("REAI_VIRTUAL_MIC_DRIVER_OVERRIDE", path);
     }
     match VirtualMic::ensure_installed() {
         Ok(()) => InstallOutcome::Installed,
         Err(e) => {
             let msg = e.to_string();
-            // 用户在密码框里点了取消
+            // The user cancelled the password prompt. This matches the SDK's own message text, which
+            // is Chinese; the SDK does not expose a typed error for it.
             if msg.contains("取消") {
                 InstallOutcome::Cancelled
             } else {
@@ -316,7 +335,7 @@ impl MicCtl {
             if self.log_tick >= HEARTBEAT_TICKS {
                 self.log_tick = 0;
                 let (n, rms, peak) = self.meter.take();
-                println!("[麦克风] 近 2 秒收到 {n} 个采样,音量 rms={rms:.4} 峰值={peak:.3}");
+                println!("[mic] last 2 s: {n} samples, rms={rms:.4}, peak={peak:.3}");
             }
         } else {
             self.log_tick = 0;
@@ -336,7 +355,7 @@ impl MicCtl {
                     )
                     .await;
                 if let Err(e) = r {
-                    eprintln!("[麦克风] 续租失败,停止音频:{e}");
+                    eprintln!("[mic] lease renewal failed, stopping audio: {e}");
                     device.stop_local_audio_reader();
                     self.lease = Lease::None;
                 }
@@ -355,14 +374,16 @@ impl MicCtl {
             .await;
         match managed {
             Ok(_) => {
-                println!("[麦克风] 有 App 在录,音频流已开启");
+                println!("[mic] an app is recording, audio stream started");
                 self.lease = Lease::Managed;
             }
             Err(e) => {
-                eprintln!("[麦克风] 带租约的音频流不可用({e}),尝试旧固件方式");
+                eprintln!(
+                    "[mic] leased audio stream unavailable ({e}), trying the old firmware path"
+                );
                 match device.start_legacy_ble_session_reader() {
                     Ok(()) => self.lease = Lease::Legacy,
-                    Err(e) => eprintln!("[麦克风] 开启失败:{e}"),
+                    Err(e) => eprintln!("[mic] could not start audio: {e}"),
                 }
             }
         }
@@ -381,7 +402,7 @@ impl MicCtl {
                         LEASE_TTL_MS,
                     )
                     .await;
-                println!("[麦克风] 没有 App 在录了,音频流已停");
+                println!("[mic] no app is recording any more, audio stream stopped");
             }
             Lease::Legacy => device.stop_local_audio_reader(),
             Lease::None => {}
@@ -423,6 +444,23 @@ mod tests {
     }
 
     #[test]
+    fn applescript_text_is_escaped() {
+        assert_eq!(applescript_escape("a\"b\\c\nd"), "a\\\"b\\\\c\\nd");
+    }
+
+    #[test]
+    fn consent_dialog_has_both_buttons_in_the_current_language() {
+        let script = consent_dialog_script();
+        assert!(script.starts_with("display dialog \""));
+        assert!(script.contains(&format!("\"{}\"", Msg::DialogInstall.text())));
+        assert!(script.contains(&format!("\"{}\"", Msg::DialogCancel.text())));
+        assert!(
+            !script.contains('\n'),
+            "newlines must be escaped for AppleScript"
+        );
+    }
+
+    #[test]
     fn initial_state_is_off_without_a_driver() {
         // 没装驱动时,无论设置里记了什么,都不能假装已启用
         let (state, installed) = initial_state();
@@ -449,7 +487,7 @@ mod tests {
     fn in_use_requires_an_active_lease_and_a_recorder() {
         let mut c = ctl(true, true);
         c.recording = true;
-        assert_eq!(c.state(), MicState::Idle); // 还没开流
+        assert_eq!(c.state(), MicState::Idle); // the stream has not started yet
         c.lease = Lease::Managed;
         assert_eq!(c.state(), MicState::InUse);
     }

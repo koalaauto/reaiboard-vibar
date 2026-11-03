@@ -1,69 +1,25 @@
 # Vibar
 
 **Unofficial macOS menu bar client for the ReAI-Vibe-Board keyboard.**
-Connect it over Bluetooth and remap every knob, key and mode lever, without installing the vendor app.
+Connect it over Bluetooth and remap every knob, key and mode lever, without the vendor app.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Platform: macOS](https://img.shields.io/badge/platform-macOS%2012%2B-lightgrey)
+![Rust 1.87+](https://img.shields.io/badge/rust-1.87%2B-orange)
 
 English | [简体中文](README.zh-CN.md)
 
 <p align="center">
-  <img src="https://ai-board.reai.com/img/aiboard/hardware-unibody.webp" alt="ReAI-Vibe-Board keyboard" width="560">
-  <br>
-  <sub>Product photo © ReAI, linked from the <a href="https://ai-board.reai.com/en">official site</a>.</sub>
+  <img src="docs/images/settings.png" alt="Vibar settings window, keys page" width="680">
 </p>
 
 > **Vibar is a community project and is not affiliated with ReAI.**
-> "ReAI", "ReAI-Vibe-Board" and related names belong to their owners and are used here only to say which hardware Vibar works with.
+> "ReAI", "ReAI-Vibe-Board" and related names belong to their owners and are used only to say which hardware Vibar works with.
+> The interface comes in English and Chinese. It follows the system language and can be changed in Settings → General.
 
-## The keyboard
+## Quick start
 
-The [ReAI-Vibe-Board](https://ai-board.reai.com/en) (also written *ReAI Vibe Board*, *REAI Vibe Board*, or *AI-Board*) is a voice-first mechanical keyboard built around AI workflows. Hardware, as described by the maker:
-
-- CNC aluminum unibody, metal knob that rotates and clicks, 6 keys
-- A physical **3-position lever: CHAT, PLAN, YOLO**, meant as an AI permission switch (ask first, propose only, run on its own)
-- Dual microphone array, USB-C and Bluetooth with automatic switching
-- Open SDK: [`ReAI-com/reai-board-sdk`](https://github.com/ReAI-com/reai-board-sdk)
-
-| | |
-|---|---|
-| USB | vendor id `0x363C`, product id `0xED20`, product string `REAI Vibe Board` |
-| Bluetooth | advertises as `REAI_VB_xxxxxxxx`, vendor GATT service `FE60`–`FE63` |
-
-## Why Vibar exists
-
-Over Bluetooth the keyboard does **not** behave like a normal Bluetooth keyboard. It talks through a vendor-specific GATT service, so pairing it in *System Settings → Bluetooth* does nothing useful. Something has to subscribe to its notifications and turn knob turns, key presses and lever moves into real actions. The vendor ships a desktop app for that. Vibar is a small, open, hackable alternative built on the vendor's MIT-licensed SDK.
-
-<p align="center">
-  <img src="docs/images/settings.png" alt="Vibar settings window, keys page" width="640">
-</p>
-
-## Features
-
-- **Bluetooth direct connection**, reconnects automatically after the keyboard wakes from sleep
-- **Remap everything**: 3 knob inputs (counter-clockwise, clockwise, press) and 6 keys to a shortcut, hold-to-talk, media key, shell command, or nothing
-- **Three layers, one per lever position.** Set defaults once, override only what differs in CHAT, YOLO or PLAN, and run an action when the lever enters or leaves a position
-- **Settings window** with a live view: press a real key and it lights up on screen
-- **Sleep time** of the keyboard, adjustable from the app (the factory 10 minutes is short)
-- **Keyboard as a system microphone** through a virtual audio device, opened only while some app is recording
-- **Hand the keyboard to another computer** with one click (disconnect, then connect on the other machine)
-- Menu bar only, light and dark mode, optional launch at login
-
-The interface is currently in Chinese. Translations are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Status
-
-Version **0.1.0**, macOS only (the vendor ships a Windows app, Vibar does not target it yet).
-
-| Verified on real hardware | |
-|---|---|
-| Environment | macOS 26.6, Apple Silicon, keyboard firmware 1.75, Bluetooth |
-| Works | scan and connect, full event stream (knob, keys, lever), reconnect after sleep, knob to system volume, reading and writing the sleep time, virtual microphone driver install |
-| **Not yet verified** | per-lever-position layers on hardware, knob direction calibration, microphone audio reaching a recording app, hand-over to a second computer, launch at login |
-
-Intel Macs and other firmware versions are untested. Reports are welcome.
-
-## Install
-
-There is no prebuilt release yet. Build from source:
+Needs macOS 12+, [Rust](https://rustup.rs) 1.87+ and `cmake` (`brew install cmake`, it builds the virtual microphone driver). No prebuilt release yet.
 
 ```bash
 git clone https://github.com/koalaauto/reaiboard-vibar.git
@@ -71,27 +27,28 @@ cd reaiboard-vibar
 scripts/bundle.sh --run      # builds build/Vibar.app and launches it
 ```
 
-Requirements: macOS 12+, Rust 1.87+, `cmake` (compiles the virtual microphone driver, `brew install cmake`).
+Then:
 
-### Permissions and signing
+1. **Unplug the USB cable.** The keyboard does not advertise Bluetooth while it is plugged in.
+2. **Press any key** to wake it. The menu bar icon turns solid when it is connected.
+3. Allow **Bluetooth** when macOS asks, and **Accessibility** when the menu shows *Accessibility permission needed…*.
+4. Open the menu bar icon → **Settings…** to change the keys.
 
-Vibar asks for two permissions:
+> **Do not pair the keyboard in System Settings → Bluetooth.** Over Bluetooth it is not a normal keyboard, and a system-paired one keeps its connection to macOS and stops advertising, so Vibar cannot find it. If you already paired it, remove it there first. Also quit the vendor app: only one program can hold the keyboard.
 
-- **Bluetooth**, to talk to the keyboard
-- **Accessibility**, to press keys on your behalf. The menu shows *需要辅助功能权限…* (accessibility permission needed) until it is granted.
+## Features
 
-macOS remembers a permission by **bundle id plus code signature**. `scripts/bundle.sh` signs with the first code-signing identity in your keychain. If it finds none it falls back to ad-hoc signing, and **an ad-hoc signature changes on every build, so you would have to grant the permissions again after each rebuild**. Details and how to avoid it: [docs/signing-and-permissions.md](docs/signing-and-permissions.md).
+- **Bluetooth direct connection**, reconnects by itself after the keyboard sleeps
+- **Remap everything**: 3 knob inputs (counter-clockwise, clockwise, press) and 6 keys to a shortcut, hold-to-talk, media key, shell command, or nothing
+- **Three layers, one per lever position.** Set defaults once, override only what differs in CHAT, YOLO or PLAN, and run an action when the lever enters or leaves a position
+- **Settings window with a live view**: press a real key and it lights up on screen
+- **Sleep time** of the keyboard, changeable (the factory 10 minutes is short)
+- **Keyboard as a system microphone** through a virtual audio device, open only while an app records
+- **Hand the keyboard to another computer** with one click
+- **English and Chinese interface**, following the system language
+- Menu bar only, light and dark mode, optional launch at login
 
-### First run checklist
-
-1. Unplug USB. The keyboard does not advertise Bluetooth while it is plugged in.
-2. Do **not** pair it in System Settings → Bluetooth. If you did, remove it there first, otherwise the system keeps the connection and Vibar cannot find it.
-3. Press any key to wake it. The menu bar icon turns solid when connected.
-4. Do not run the vendor app at the same time. Only one program can hold the keyboard.
-
-## Use
-
-Menu bar icon → **设置… (Settings)**. The default layout out of the box:
+### Default layout
 
 | Input | Default |
 |---|---|
@@ -99,7 +56,68 @@ Menu bar icon → **设置… (Settings)**. The default layout out of the box:
 | Tab, New, Esc, Action, Enter | `Tab`, `⌘N`, `Esc`, `⌘Return`, `Return` |
 | Voice key | hold `F18` |
 
-Set your push-to-talk or dictation tool to **hold F18** and the voice key becomes a talk button. Everything is also in a plain TOML file, see [docs/configuration.md](docs/configuration.md).
+Set your push-to-talk or dictation tool to **hold F18** and the voice key becomes a talk button. Everything is stored in one TOML file: [docs/configuration.md](docs/configuration.md).
+
+## Status
+
+Version **0.1.0**, macOS only. Tested on one unit: macOS 26.6, Apple Silicon, keyboard firmware 1.75, Bluetooth.
+
+**Verified on hardware**
+
+- Scan, connect, and the full event stream (knob, keys, lever)
+- Reconnect after the keyboard sleeps
+- A key press becoming a system action (knob to system volume)
+- Reading and writing the sleep time
+- Installing the virtual microphone driver
+
+**Not verified yet**
+
+- Per-lever-position layers on hardware
+- Knob direction calibration
+- Microphone audio reaching a recording app
+- Handing the keyboard to a second computer
+- Launch at login
+
+Intel Macs and other firmware versions are untested. Reports are welcome.
+
+## The keyboard
+
+The [ReAI-Vibe-Board](https://ai-board.reai.com/en) (also written *ReAI Vibe Board*, *REAI Vibe Board* or *AI-Board*) is a voice-first mechanical keyboard with a metal knob, six keys, dual microphones and a physical **3-position lever, CHAT / PLAN / YOLO**, meant as an AI permission switch. It connects by USB-C or Bluetooth and has an open SDK, [`ReAI-com/reai-board-sdk`](https://github.com/ReAI-com/reai-board-sdk).
+
+<p align="center">
+  <img src="https://ai-board.reai.com/img/aiboard/hardware-unibody.webp" alt="ReAI-Vibe-Board keyboard" width="420">
+  <br>
+  <sub>Product photo © ReAI, linked from the <a href="https://ai-board.reai.com/en">official site</a>.</sub>
+</p>
+
+| | |
+|---|---|
+| USB | vendor id `0x363C`, product id `0xED20`, product string `REAI Vibe Board` |
+| Bluetooth | advertises as `REAI_VB_xxxxxxxx`, vendor GATT service `FE60`–`FE63` |
+
+**Why Vibar exists.** Over Bluetooth the keyboard talks through a vendor-specific GATT service, not as a standard Bluetooth keyboard. Something has to subscribe to its notifications and turn knob turns, key presses and lever moves into real actions. The vendor ships a desktop app for that. Vibar is a small, open, hackable alternative built on the vendor's MIT-licensed SDK. More in [docs/hardware.md](docs/hardware.md).
+
+## Permissions and signing
+
+Vibar needs **Bluetooth** (to talk to the keyboard) and **Accessibility** (to press keys for you). macOS remembers a permission by bundle id plus code signature. `scripts/bundle.sh` signs with the first code-signing identity in your keychain and falls back to ad-hoc signing, and **an ad-hoc signature changes on every build, so you grant the permissions again after each rebuild**. How to avoid that: [docs/signing-and-permissions.md](docs/signing-and-permissions.md).
+
+## Troubleshooting
+
+| Symptom | Likely cause and fix |
+|---|---|
+| Menu stays on *Searching for the keyboard…* | The keyboard is asleep (press a key), a USB cable is plugged in, it is paired in System Settings → Bluetooth (remove it there), or another program or computer holds it (quit it, or use *Disconnect Keyboard* on that computer). |
+| Keys do nothing | Accessibility is not granted. The menu shows an *Accessibility permission needed…* row until it is. |
+| Asked for permissions after every build | Ad-hoc signing, see [docs/signing-and-permissions.md](docs/signing-and-permissions.md). |
+| The binary is killed as soon as it touches Bluetooth | You ran it from a terminal or IDE. Run `build/Vibar.app` instead. |
+| Knob goes the wrong way | Settings → Keyboard → Calibrate, or set `knob_swap = true` in the config. |
+| No `ReAI-Vibe-Board` input in System Settings → Sound | Enable it in Settings → Microphone (an administrator password is needed). If it still does not show, use Uninstall and enable it again. |
+
+## Uninstall
+
+1. In Vibar: Settings → Microphone → **Uninstall** to remove the audio driver, and switch off launch at login. Then quit Vibar and delete `Vibar.app`.
+2. Remove settings: `rm -rf ~/.config/vibar`.
+3. If the driver is still listed: `sudo rm -rf /Library/Audio/Plug-Ins/HAL/ReAIVibeBoard.driver && sudo killall coreaudiod`.
+4. If launch at login was on: `rm ~/Library/LaunchAgents/dev.koala.vibar.plist`.
 
 ## Documentation
 
@@ -115,7 +133,7 @@ Set your push-to-talk or dictation tool to **hold F18** and the voice key become
 
 ## Safety
 
-Apart from the **sleep time** that you change yourself, Vibar only reads from the keyboard. It never touches key configuration, firmware update or factory commands. Installing the virtual microphone needs an administrator password and restarts `coreaudiod`, so system audio drops for a second or two. You are asked first, and you can remove the driver from the settings window.
+Apart from the **sleep time** that you change yourself, Vibar only reads from the keyboard. It never touches key configuration, firmware update or factory commands. Installing the virtual microphone needs an administrator password and restarts `coreaudiod`, so system audio drops for a second or two. You are asked first, and you can remove the driver any time.
 
 ## Acknowledgements and license
 

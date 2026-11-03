@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vibar 设置</title>
+<title>Vibar</title>
 <style>
 :root {
   --bg: #f5f5f7; --panel: #ffffff; --line: rgba(0,0,0,.09); --text: #1d1d1f; --sub: #6e6e73;
@@ -22,9 +22,9 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; cursor: default; }
 button { font: inherit; color: inherit; cursor: default; }
 button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.app { display: grid; grid-template-columns: 176px 1fr; height: 100%; }
+.app { display: grid; grid-template-columns: 188px 1fr; height: 100%; }
 
-/* 侧栏 */
+/* Sidebar */
 .side { padding: 44px 12px 14px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
 .nav { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 8px; border: 0; background: none; text-align: left; width: 100%; }
 .nav svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
@@ -37,7 +37,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--sub); margin-right: 6px; }
 .dot.on { background: var(--ok); }
 
-/* 主区 */
+/* Main area */
 .main { padding: 44px 28px 28px; overflow: auto; position: relative; }
 .page { display: none; max-width: 640px; }
 .page.on { display: block; }
@@ -68,7 +68,7 @@ input[type=text] { width: 100%; }
 .gh small { display: block; }
 .note { font-size: 12px; color: var(--sub); margin: 12px 4px 0; }
 
-/* 键位页 */
+/* Keys page */
 .layers { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
 .hint { color: var(--sub); font-size: 12px; margin: 0 0 14px; min-height: 18px; }
 .board { display: grid; grid-template-columns: auto 1fr; gap: 26px; align-items: start; padding: 20px; }
@@ -93,14 +93,14 @@ kbd { display: inline-block; min-width: 24px; padding: 1px 7px; margin-right: 4p
 .rec { width: 100%; min-height: 40px; border: 1px dashed var(--line); background: var(--key); border-radius: 9px; padding: 7px 10px; text-align: left; display: flex; align-items: center; justify-content: space-between; }
 .rec .edit { color: var(--sub); font-size: 12px; }
 .rec.on { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
-.mode-tabs .seg button.cur::after { content: "  当前"; font-size: 11px; color: var(--ok); font-weight: 400; }
+.mode-tabs .seg button .cur { font-size: 11px; color: var(--ok); font-weight: 400; margin-left: 4px; }
 .saved { color: var(--sub); font-size: 12px; transition: opacity .3s; opacity: 0; }
 .saved.show { opacity: 1; }
 .sub-row { display: block; padding: 10px 0; border-top: 1px solid var(--line); }
 .sub-row:first-of-type { border-top: 0; padding-top: 0; }
 .sub-row .t { margin-bottom: 8px; }
 
-/* 窗口内提示 */
+/* In-window notices */
 .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(20px); background: var(--toast); color: var(--toast-text);
   padding: 8px 16px; border-radius: 10px; font-size: 12px; opacity: 0; pointer-events: none; transition: all .25s; max-width: 80%; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -109,40 +109,40 @@ kbd { display: inline-block; min-width: 24px; padding: 1px 7px; margin-right: 4p
 <body>
 <div class="app">
   <aside class="side">
-    <button class="nav on" data-page="keys"><svg viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="5" height="5" rx="1.3"/><rect x="9.5" y="1.5" width="5" height="5" rx="1.3"/><rect x="1.5" y="9.5" width="5" height="5" rx="1.3"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.3"/></svg>键位</button>
-    <button class="nav" data-page="board"><svg viewBox="0 0 16 16"><rect x="1" y="3.5" width="14" height="9" rx="2.2"/><circle cx="4.6" cy="8" r="1.4"/><path d="M8.6 6.6h1.4M11.4 6.6h1.4M8.6 9.4h1.4M11.4 9.4h1.4"/></svg>键盘</button>
-    <button class="nav" data-page="mic"><svg viewBox="0 0 16 16"><rect x="5.6" y="1.5" width="4.8" height="8" rx="2.4"/><path d="M3.2 7.6a4.8 4.8 0 0 0 9.6 0M8 12.4v2.1"/></svg>麦克风</button>
-    <button class="nav" data-page="general"><svg viewBox="0 0 16 16"><path d="M2 4.5h12M2 11.5h12"/><circle cx="5.5" cy="4.5" r="1.7" fill="var(--bg)"/><circle cx="10.5" cy="11.5" r="1.7" fill="var(--bg)"/></svg>通用</button>
-    <div class="status"><b id="st-main"><span class="dot"></span>未连接</b><span id="st-sub">按任意键唤醒键盘</span></div>
+    <button class="nav on" data-page="keys"><svg viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="5" height="5" rx="1.3"/><rect x="9.5" y="1.5" width="5" height="5" rx="1.3"/><rect x="1.5" y="9.5" width="5" height="5" rx="1.3"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.3"/></svg><span data-i18n="nav_keys"></span></button>
+    <button class="nav" data-page="board"><svg viewBox="0 0 16 16"><rect x="1" y="3.5" width="14" height="9" rx="2.2"/><circle cx="4.6" cy="8" r="1.4"/><path d="M8.6 6.6h1.4M11.4 6.6h1.4M8.6 9.4h1.4M11.4 9.4h1.4"/></svg><span data-i18n="nav_board"></span></button>
+    <button class="nav" data-page="mic"><svg viewBox="0 0 16 16"><rect x="5.6" y="1.5" width="4.8" height="8" rx="2.4"/><path d="M3.2 7.6a4.8 4.8 0 0 0 9.6 0M8 12.4v2.1"/></svg><span data-i18n="nav_mic"></span></button>
+    <button class="nav" data-page="general"><svg viewBox="0 0 16 16"><path d="M2 4.5h12M2 11.5h12"/><circle cx="5.5" cy="4.5" r="1.7" fill="var(--bg)"/><circle cx="10.5" cy="11.5" r="1.7" fill="var(--bg)"/></svg><span data-i18n="nav_general"></span></button>
+    <div class="status"><b id="st-main"></b><span id="st-sub"></span></div>
     <div class="ver">Vibar {{VERSION}}</div>
   </aside>
 
   <main class="main">
-    <!-- 键位 -->
+    <!-- Keys -->
     <section class="page on" id="page-keys">
-      <h2>键位</h2>
-      <p class="lead">点一个键或旋钮,设置它按下后做什么。</p>
+      <h2 data-i18n="keys_title"></h2>
+      <p class="lead" data-i18n="keys_lead"></p>
       <div class="layers mode-tabs">
         <div class="seg" id="layer-tabs"></div>
-        <span class="saved" id="saved">已保存</span>
+        <span class="saved" id="saved"></span>
       </div>
       <p class="hint" id="layer-hint"></p>
       <div class="card board">
         <div>
-          <div class="cap">旋钮</div>
+          <div class="cap" data-i18n="cap_knob"></div>
           <div class="knob">
-            <button class="in round" data-in="knob_ccw"><span class="n">逆时针</span><span class="v"></span></button>
-            <button class="in round big" data-in="knob_press"><span class="n">按下</span><span class="v"></span></button>
-            <button class="in round" data-in="knob_cw"><span class="n">顺时针</span><span class="v"></span></button>
+            <button class="in round" data-in="knob_ccw"><span class="n" data-i18n="in_ccw"></span><span class="v"></span></button>
+            <button class="in round big" data-in="knob_press"><span class="n" data-i18n="in_press"></span><span class="v"></span></button>
+            <button class="in round" data-in="knob_cw"><span class="n" data-i18n="in_cw"></span><span class="v"></span></button>
           </div>
         </div>
         <div>
-          <div class="cap">按键</div>
+          <div class="cap" data-i18n="cap_keys"></div>
           <div class="keys">
             <button class="in" data-in="tab"><span class="n">Tab</span><span class="v"></span></button>
             <button class="in" data-in="new"><span class="n">New</span><span class="v"></span></button>
             <button class="in" data-in="esc"><span class="n">Esc</span><span class="v"></span></button>
-            <button class="in" data-in="voice"><span class="n">语音</span><span class="v"></span></button>
+            <button class="in" data-in="voice"><span class="n" data-i18n="in_voice"></span><span class="v"></span></button>
             <button class="in" data-in="action"><span class="n">Action</span><span class="v"></span></button>
             <button class="in" data-in="enter"><span class="n">Enter</span><span class="v"></span></button>
           </div>
@@ -152,60 +152,60 @@ kbd { display: inline-block; min-width: 24px; padding: 1px 7px; margin-right: 4p
       <div class="card editor" id="lever" style="display:none"></div>
     </section>
 
-    <!-- 键盘 -->
+    <!-- Keyboard -->
     <section class="page" id="page-board">
-      <h2>键盘</h2>
-      <p class="lead">连接状态和电源设置。</p>
+      <h2 data-i18n="board_title"></h2>
+      <p class="lead" data-i18n="board_lead"></p>
       <div class="card">
-        <div class="row"><div class="t">连接<small id="b-conn">未连接</small></div><button class="btn" id="b-release" disabled>断开键盘</button></div>
-        <div class="row"><div class="t">电量<small id="b-batt">连接后显示</small></div></div>
-        <div class="row"><div class="t">固件版本<small id="b-fw">连接后显示</small></div></div>
+        <div class="row"><div class="t"><span data-i18n="row_conn"></span><small id="b-conn"></small></div><button class="btn" id="b-release" disabled></button></div>
+        <div class="row"><div class="t"><span data-i18n="row_battery"></span><small id="b-batt"></small></div></div>
+        <div class="row"><div class="t"><span data-i18n="row_firmware"></span><small id="b-fw"></small></div></div>
       </div>
       <div class="card">
-        <div class="row"><div class="t">无操作后休眠<small id="b-sleep-note">时间越长越耗电</small></div>
+        <div class="row"><div class="t"><span data-i18n="row_sleep"></span><small id="b-sleep-note"></small></div>
           <select id="b-sleep" disabled></select></div>
-        <div class="row"><div class="t">旋钮方向反了<small id="cal-msg">按提示转一格旋钮,Vibar 会自动校正</small></div>
-          <button class="btn" id="cal-btn">校准</button></div>
+        <div class="row"><div class="t"><span data-i18n="row_cal"></span><small id="cal-msg"></small></div>
+          <button class="btn" id="cal-btn"></button></div>
       </div>
     </section>
 
-    <!-- 麦克风 -->
+    <!-- Microphone -->
     <section class="page" id="page-mic">
-      <h2>麦克风</h2>
-      <p class="lead">让键盘的麦克风出现在系统的声音输入里,任何 App 都能选它。</p>
+      <h2 data-i18n="mic_title"></h2>
+      <p class="lead" data-i18n="mic_lead"></p>
       <div class="card">
-        <div class="row"><div class="t">用作系统麦克风<small id="m-state">未启用</small></div><button class="switch" id="m-switch"></button></div>
-        <div class="row"><div class="t">卸载<small>从系统里删除键盘麦克风,以后可以再启用</small></div><button class="btn" id="m-remove" disabled>卸载</button></div>
+        <div class="row"><div class="t"><span data-i18n="mic_use"></span><small id="m-state"></small></div><button class="switch" id="m-switch"></button></div>
+        <div class="row"><div class="t"><span data-i18n="mic_uninstall"></span><small data-i18n="mic_uninstall_note"></small></div><button class="btn" id="m-remove" data-i18n="mic_uninstall" disabled></button></div>
       </div>
-      <p class="note">只有 App 正在录音时,键盘才会打开麦克风。要确认有没有声音,在系统设置的声音输入里选中 ReAI-Vibe-Board 并说话,音量条会跳。</p>
+      <p class="note" data-i18n="mic_note"></p>
     </section>
 
-    <!-- 通用 -->
+    <!-- General -->
     <section class="page" id="page-general">
-      <h2>通用</h2>
-      <p class="lead">Vibar 的基本设置。</p>
+      <h2 data-i18n="general_title"></h2>
+      <p class="lead" data-i18n="general_lead"></p>
       <div class="card">
-        <div class="row"><div class="t">开机时自动启动</div><button class="switch" id="g-auto"></button></div>
-        <div class="row"><div class="t">配置文件<small id="g-path"></small></div><button class="btn" id="g-open">打开</button></div>
+        <div class="row"><div class="t" data-i18n="row_autostart"></div><button class="switch" id="g-auto"></button></div>
+        <div class="row"><div class="t" data-i18n="row_language"></div><select id="g-lang"></select></div>
+        <div class="row"><div class="t"><span data-i18n="row_config"></span><small id="g-path"></small></div><button class="btn" id="g-open" data-i18n="btn_open"></button></div>
       </div>
       <div class="card">
-        <div class="row"><div class="t">Vibar<small>版本 {{VERSION}}</small></div><button class="btn" id="g-about">关于</button></div>
-        <div class="row"><div class="t gh"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>GitHub<small>{{REPO_SHORT}}</small></span></div><button class="btn" id="g-repo">打开</button></div>
+        <div class="row"><div class="t"><span data-i18n="row_app"></span><small id="g-version"></small></div><button class="btn" id="g-about" data-i18n="btn_about"></button></div>
+        <div class="row"><div class="t gh"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span><span data-i18n="row_github"></span><small>{{REPO_SHORT}}</small></span></div><button class="btn" id="g-repo" data-i18n="btn_open"></button></div>
       </div>
-      <p class="note">非官方的社区项目,与 ReAI 公司没有隶属关系。</p>
+      <p class="note" data-i18n="unofficial"></p>
     </section>
   </main>
 </div>
 <div class="toast" id="toast"></div>
 
 <script>
-const LABEL = { knob_ccw: "逆时针", knob_cw: "顺时针", knob_press: "按下旋钮", tab: "Tab", new: "New", esc: "Esc", voice: "语音", action: "Action", enter: "Enter" };
-const MODE_NAME = { default: "所有档位", chat: "CHAT", yolo: "YOLO", plan: "PLAN" };
-const MEDIA = { volume_up: "音量加", volume_down: "音量减", mute: "静音", play_pause: "播放暂停" };
-const SLEEP = [[600, "10 分钟"], [1800, "30 分钟"], [3600, "1 小时"], [14400, "4 小时"], [43200, "12 小时"]];
+const MEDIA_KEYS = ["volume_up", "volume_down", "mute", "play_pause"];
+const SLEEP = [600, 1800, 3600, 14400, 43200];
 const MOD_SYM = { cmd: "⌘", shift: "⇧", alt: "⌥", ctrl: "⌃" };
-const KEY_SYM = { return: "↩", esc: "Esc", tab: "⇥", space: "空格", backspace: "⌫", delete: "⌦", up: "↑", down: "↓", left: "←", right: "→", home: "↖", end: "↘", pageup: "⇞", pagedown: "⇟" };
-const TYPES = [["key", "快捷键"], ["hold", "按住"], ["media", "媒体键"], ["shell", "运行命令"], ["none", "无操作"]];
+const TYPES = ["key", "hold", "media", "shell", "none"];
+const LABEL_KEY = { knob_ccw: "lbl_knob_ccw", knob_cw: "lbl_knob_cw", knob_press: "lbl_knob_press", voice: "lbl_voice" };
+const LITERAL_LABEL = { tab: "Tab", new: "New", esc: "Esc", action: "Action", enter: "Enter" };
 
 let cfg = { bindings: {}, modes: {} };
 let st = {};
@@ -214,24 +214,46 @@ let recording = null;
 let calibrating = false;
 let saveTimer = null;
 let toastTimer = null;
-const drafts = {};      // 选了类型但还没填内容的绑定,不写进配置,避免保存出空值
+const drafts = {};      // a type chosen but not yet filled in is kept here, never saved as an empty value
+const leverDraft = {};
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const send = m => window.ipc.postMessage(JSON.stringify(m));
 const draftKey = (l, n) => `${l}/${n}`;
 
-function toast(text) {
-  const t = $("#toast"); t.textContent = text; t.classList.add("show");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+/* ---------- Translation ---------- */
+const t = (key, vars = {}) => (window.__strings[key] ?? key).replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ""));
+const modeName = m => (m === "default" ? t("layer_all") : m.toUpperCase());
+const inputLabel = n => (LABEL_KEY[n] ? t(LABEL_KEY[n]) : LITERAL_LABEL[n]);
+
+function applyStrings() {
+  document.documentElement.lang = window.__lang === "zh-CN" ? "zh-CN" : "en";
+  document.title = t("page_title");
+  $$("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  $$("[data-i18n-ph]").forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+  $("#g-version").textContent = t("about_version", { v: window.__v });
+  const lang = $("#g-lang");
+  lang.innerHTML = [["auto", "lang_auto"], ["en", "lang_en"], ["zh-CN", "lang_zh"]]
+    .map(([v, k]) => `<option value="${v}">${t(k)}</option>`).join("");
+  lang.value = cfg.language || "auto";
+  const sleep = $("#b-sleep");
+  const keep = sleep.value;
+  sleep.innerHTML = SLEEP.map(s => `<option value="${s}">${t("sleep_" + s)}</option>`).join("");
+  if (keep) sleep.value = keep;
 }
 
-/* ---------- 绑定的读写 ---------- */
+function toast(text) {
+  const el = $("#toast"); el.textContent = text; el.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+}
+
+/* ---------- Reading and writing bindings ---------- */
 function fromCfg(b) {
   if (b == null) return null;
   if (typeof b === "string") return { type: "key", value: b };
   if (b.none) return { type: "none", value: "" };
-  for (const t of ["key", "hold", "media", "shell"]) if (b[t] != null) return { type: t, value: b[t] };
+  for (const k of ["key", "hold", "media", "shell"]) if (b[k] != null) return { type: k, value: b[k] };
   return { type: "none", value: "" };
 }
 function toCfg(x) {
@@ -252,7 +274,7 @@ const needsValue = x => x && (x.type === "key" || x.type === "hold" || x.type ==
 
 function setOwn(layerName, name, x) {
   const dk = draftKey(layerName, name);
-  if (needsValue(x)) { drafts[dk] = x; return; }     // 还没填内容,先不保存
+  if (needsValue(x)) { drafts[dk] = x; return; }     // not filled in yet, do not save
   delete drafts[dk];
   if (layerName === "default") { if (x) cfg.bindings[name] = toCfg(x); else delete cfg.bindings[name]; }
   else {
@@ -262,41 +284,41 @@ function setOwn(layerName, name, x) {
   changed();
 }
 
-/* ---------- 显示 ---------- */
+/* ---------- Display ---------- */
+const keySymbol = key => ({ return: "↩", esc: "Esc", tab: "⇥", space: t("key_space"), backspace: "⌫", delete: "⌦",
+  up: "↑", down: "↓", left: "←", right: "→", home: "↖", end: "↘", pageup: "⇞", pagedown: "⇟" })[key] || key.toUpperCase();
 function keysText(value) {
   const parts = value.split("+").map(s => s.trim());
   const key = parts.pop();
-  return parts.map(p => MOD_SYM[p] || p).join("") + (KEY_SYM[key] || key.toUpperCase());
+  return parts.map(p => MOD_SYM[p] || p).join("") + keySymbol(key);
 }
 function pretty(x) {
-  if (!x) return "无";
+  if (!x) return t("val_none");
   switch (x.type) {
-    case "none": return "无操作";
-    case "media": return MEDIA[x.value] || x.value;
-    case "shell": return "运行命令";
-    case "hold": return x.value ? "按住 " + keysText(x.value) : "按住";
-    default: return x.value ? keysText(x.value) : "未设置";
+    case "none": return t("val_nothing");
+    case "media": return t("media_" + x.value);
+    case "shell": return t("val_command");
+    case "hold": return x.value ? t("val_hold", { keys: keysText(x.value) }) : t("val_hold_empty");
+    default: return x.value ? keysText(x.value) : t("val_unset");
   }
 }
 function keycaps(value) {
   const parts = value.split("+").map(s => s.trim());
   const key = parts.pop();
-  return [...parts.map(p => MOD_SYM[p] || p), KEY_SYM[key] || key.toUpperCase()].map(s => `<kbd>${s}</kbd>`).join("");
+  return [...parts.map(p => MOD_SYM[p] || p), keySymbol(key)].map(s => `<kbd>${s}</kbd>`).join("");
 }
 
 function renderTabs() {
   const box = $("#layer-tabs"); box.innerHTML = "";
   for (const m of ["default", "chat", "yolo", "plan"]) {
     const b = document.createElement("button");
-    b.textContent = MODE_NAME[m];
+    b.textContent = modeName(m);
     if (m === layer) b.classList.add("on");
-    if (m === st.mode) b.classList.add("cur");
+    if (m === st.mode) { const c = document.createElement("span"); c.className = "cur"; c.textContent = t("tag_current"); b.appendChild(c); }
     b.onclick = () => { layer = m; render(); };
     box.appendChild(b);
   }
-  $("#layer-hint").textContent = layer === "default"
-    ? "这里的设置在拨杆的每一档都有效。"
-    : `在 ${MODE_NAME[layer]} 档,只有改过的键不同,其余和所有档位一样。有蓝点的键在本档有自己的设置。`;
+  $("#layer-hint").textContent = layer === "default" ? t("hint_all") : t("hint_mode", { mode: modeName(layer) });
 }
 
 function renderBoard() {
@@ -315,42 +337,42 @@ function renderEditor() {
   const o = own(layer, sel);
   const eff = effective(layer, sel);
   const inherited = layer !== "default" && !o;
-  let html = `<h3><span>${LABEL[sel]}</span>${layer !== "default" ? `<button class="btn" id="ed-inherit" ${inherited ? "disabled" : ""}>跟随所有档位</button>` : ""}</h3>`;
-  if (inherited) html += `<p class="hint" style="margin:0 0 10px">本档和所有档位一样,想单独设置就在下面选一种。</p>`;
-  html += `<div class="seg" id="ed-type">${TYPES.map(([t, n]) => `<button data-t="${t}" class="${!inherited && eff && eff.type === t ? "on" : ""}">${n}</button>`).join("")}</div>`;
+  let html = `<h3><span>${inputLabel(sel)}</span>${layer !== "default" ? `<button class="btn" id="ed-inherit" ${inherited ? "disabled" : ""}>${t("follow_all")}</button>` : ""}</h3>`;
+  if (inherited) html += `<p class="hint" style="margin:0 0 10px">${t("inherited_hint")}</p>`;
+  html += `<div class="seg" id="ed-type">${TYPES.map(k => `<button data-t="${k}" class="${!inherited && eff && eff.type === k ? "on" : ""}">${t("type_" + k)}</button>`).join("")}</div>`;
   html += `<div class="body" id="ed-body"></div>`;
-  if (sel === "voice") html += `<p class="hint" style="margin:12px 0 0">在你的语音输入工具里,把按住说话的快捷键设成 F18,就能用这个键说话。</p>`;
+  if (sel === "voice") html += `<p class="hint" style="margin:12px 0 0">${t("voice_hint")}</p>`;
   box.innerHTML = html;
   $("#ed-inherit")?.addEventListener("click", () => { delete drafts[draftKey(layer, sel)]; setOwn(layer, sel, null); render(); });
   $$("#ed-type button").forEach(b => b.onclick = () => {
-    const t = b.dataset.t;
+    const k = b.dataset.t;
     const cur = effective(layer, sel);
-    const keep = cur && cur.type === t ? cur.value : ({ key: "", hold: "", media: "volume_up", shell: "", none: "" })[t];
-    setOwn(layer, sel, { type: t, value: keep });
+    const keep = cur && cur.type === k ? cur.value : ({ key: "", hold: "", media: "volume_up", shell: "", none: "" })[k];
+    setOwn(layer, sel, { type: k, value: keep });
     render();
   });
   renderEditorBody($("#ed-body"), inherited ? null : eff, x => { setOwn(layer, sel, x); renderBoard(); });
 }
 
-// 动作编辑器主体,按键编辑和拨杆的进入离开动作共用
+// The action editor body, shared by the key editor and the lever enter and leave actions
 function renderEditorBody(body, x, onChange) {
   if (!x) { body.innerHTML = ""; return; }
   if (x.type === "key" || x.type === "hold") {
     const r = document.createElement("button");
     r.className = "rec";
-    const idle = () => x.value ? `<span>${keycaps(x.value)}</span><span class="edit">点击修改</span>` : `<span style="color:var(--sub)">点击后按下新的快捷键</span>`;
+    const idle = () => x.value ? `<span>${keycaps(x.value)}</span><span class="edit">${t("rec_edit")}</span>` : `<span style="color:var(--sub)">${t("rec_idle")}</span>`;
     r.innerHTML = idle();
     r.onclick = () => startRecording(r, idle, v => { x = { type: x.type, value: v }; onChange(x); r.innerHTML = idle(); });
     body.innerHTML = ""; body.appendChild(r);
-    if (x.type === "hold") body.insertAdjacentHTML("beforeend", `<p class="hint" style="margin:8px 0 0">按下键盘上的键时一直按住这个快捷键,松开时放开,适合按住说话。</p>`);
+    if (x.type === "hold") body.insertAdjacentHTML("beforeend", `<p class="hint" style="margin:8px 0 0">${t("hold_hint")}</p>`);
   } else if (x.type === "media") {
-    body.innerHTML = `<select>${Object.entries(MEDIA).map(([k, n]) => `<option value="${k}" ${k === x.value ? "selected" : ""}>${n}</option>`).join("")}</select>`;
+    body.innerHTML = `<select>${MEDIA_KEYS.map(k => `<option value="${k}" ${k === x.value ? "selected" : ""}>${t("media_" + k)}</option>`).join("")}</select>`;
     $("select", body).onchange = e => onChange({ type: "media", value: e.target.value });
   } else if (x.type === "shell") {
-    body.innerHTML = `<input type="text" placeholder="例如 open -a Safari" value="${(x.value || "").replace(/"/g, "&quot;")}">`;
+    body.innerHTML = `<input type="text" placeholder="${t("shell_ph")}" value="${(x.value || "").replace(/"/g, "&quot;")}">`;
     $("input", body).oninput = e => onChange({ type: "shell", value: e.target.value });
   } else {
-    body.innerHTML = `<p class="hint" style="margin:0">这个键什么也不做。</p>`;
+    body.innerHTML = `<p class="hint" style="margin:0">${t("none_hint")}</p>`;
   }
 }
 
@@ -358,30 +380,30 @@ function renderLever() {
   const box = $("#lever");
   if (layer === "default") { box.style.display = "none"; return; }
   box.style.display = "";
-  box.innerHTML = `<h3><span>拨杆拨到 ${MODE_NAME[layer]} 档</span></h3>`;
-  for (const [field, title] of [["on_enter", "拨过来时"], ["on_leave", "拨走时"]]) {
+  box.innerHTML = `<h3><span>${t("lever_title", { mode: modeName(layer) })}</span></h3>`;
+  for (const [field, title] of [["on_enter", "lever_enter"], ["on_leave", "lever_leave"]]) {
     const cur = fromCfg((cfg.modes[layer] || {})[field]);
     const row = document.createElement("div");
     row.className = "sub-row";
-    row.innerHTML = `<div class="t">${title}</div><div class="seg">${[["none", "不做"], ["key", "快捷键"], ["shell", "运行命令"]].map(([t, n]) =>
-      `<button data-t="${t}" class="${(cur ? cur.type : "none") === t ? "on" : ""}">${n}</button>`).join("")}</div><div class="body" style="margin-top:10px"></div>`;
+    row.innerHTML = `<div class="t">${t(title)}</div><div class="seg">${[["none", "lever_none"], ["key", "type_key"], ["shell", "type_shell"]].map(([k, label]) =>
+      `<button data-t="${k}" class="${(cur ? cur.type : "none") === k ? "on" : ""}">${t(label)}</button>`).join("")}</div><div class="body" style="margin-top:10px"></div>`;
     box.appendChild(row);
     const set = x => { const m = modeCfg(layer); if (x && x.type !== "none" && !needsValue(x)) m[field] = toCfg(x); else delete m[field]; changed(); };
     $$("button", row).forEach(b => b.onclick = () => {
-      const t = b.dataset.t;
-      set(t === "none" ? null : { type: t, value: cur && cur.type === t ? cur.value : "" });
-      leverDraft[layer + field] = t === "none" ? null : { type: t, value: cur && cur.type === t ? cur.value : "" };
+      const k = b.dataset.t;
+      const next = k === "none" ? null : { type: k, value: cur && cur.type === k ? cur.value : "" };
+      set(next);
+      leverDraft[layer + field] = next;
       renderLever();
     });
     const shown = leverDraft[layer + field] !== undefined ? leverDraft[layer + field] : (cur && cur.type !== "none" ? cur : null);
     renderEditorBody($(".body", row), shown, x => { leverDraft[layer + field] = x; set(x); });
   }
 }
-const leverDraft = {};
 
 function render() { renderTabs(); renderBoard(); renderEditor(); renderLever(); }
 
-/* ---------- 快捷键录制 ---------- */
+/* ---------- Recording a shortcut ---------- */
 const CODE = (() => {
   const m = { Tab: "tab", Enter: "return", NumpadEnter: "return", Escape: "esc", Space: "space", Backspace: "backspace", Delete: "delete",
     ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right", Home: "home", End: "end", PageUp: "pageup", PageDown: "pagedown",
@@ -394,7 +416,7 @@ const CODE = (() => {
 
 function startRecording(el, idle, done) {
   if (recording) recording.el.classList.remove("on");
-  el.classList.add("on"); el.innerHTML = "<span>现在按下快捷键</span>";
+  el.classList.add("on"); el.innerHTML = `<span>${t("rec_active")}</span>`;
   recording = { el, idle, done };
 }
 window.addEventListener("keydown", e => {
@@ -411,20 +433,19 @@ window.addEventListener("mousedown", e => {
   if (recording && !recording.el.contains(e.target)) { const { el, idle } = recording; recording = null; el.classList.remove("on"); el.innerHTML = idle(); }
 });
 
-/* ---------- 保存 ---------- */
+/* ---------- Saving ---------- */
 function changed() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => send({ t: "save", config: cfg }), 350);
 }
 
-/* ---------- 导航与其他页 ---------- */
+/* ---------- Navigation and the other pages ---------- */
 $$(".nav").forEach(b => b.onclick = () => {
   $$(".nav").forEach(x => x.classList.toggle("on", x === b));
   $$(".page").forEach(p => p.classList.toggle("on", p.id === "page-" + b.dataset.page));
 });
 $$(".in").forEach(b => b.onclick = () => { sel = b.dataset.in; render(); });
 
-$("#b-sleep").innerHTML = SLEEP.map(([s, n]) => `<option value="${s}">${n}</option>`).join("");
 $("#b-sleep").onchange = e => send({ t: "sleep", secs: +e.target.value });
 $("#b-release").onclick = () => send({ t: "release", on: !st.released });
 $("#m-switch").onclick = () => send({ t: "mic", on: !(st.mic && st.mic.state !== "off") });
@@ -433,37 +454,38 @@ $("#g-auto").onclick = () => send({ t: "autostart", on: !st.autostart });
 $("#g-open").onclick = () => send({ t: "open_config" });
 $("#g-about").onclick = () => send({ t: "about" });
 $("#g-repo").onclick = () => send({ t: "open_repo" });
-$("#cal-btn").onclick = () => {
-  calibrating = !calibrating;
-  $("#cal-btn").textContent = calibrating ? "取消" : "校准";
-  $("#cal-msg").textContent = calibrating ? "现在顺时针转一格旋钮" : "按提示转一格旋钮,Vibar 会自动校正";
+$("#g-lang").onchange = e => {
+  if (e.target.value === "auto") delete cfg.language; else cfg.language = e.target.value;
+  changed();
 };
+$("#cal-btn").onclick = () => { calibrating = !calibrating; renderState(); };
 
 function renderState() {
   const on = !!st.connected;
-  $("#st-main").innerHTML = `<span class="dot ${on ? "on" : ""}"></span>${st.released ? "已断开" : on ? "已连接" : "未连接"}`;
-  $("#st-sub").textContent = st.released ? "别的电脑可以连接" : on ? (st.battery != null ? `电量 ${st.battery}%` : "") : "按任意键唤醒键盘";
-  $("#b-conn").textContent = st.released ? "已断开,别的电脑可以连接" : on ? "已连接" : "未连接";
-  $("#b-release").textContent = st.released ? "连接键盘" : "断开键盘";
+  $("#st-main").innerHTML = `<span class="dot ${on ? "on" : ""}"></span>${st.released ? t("st_released") : on ? t("st_connected") : t("st_not_connected")}`;
+  $("#st-sub").textContent = st.released ? t("st_others") : on ? (st.battery != null ? t("st_battery", { n: st.battery }) : "") : t("st_wake");
+  $("#b-conn").textContent = st.released ? t("conn_released") : on ? t("st_connected") : t("st_not_connected");
+  $("#b-release").textContent = st.released ? t("btn_connect") : t("btn_disconnect");
   $("#b-release").disabled = !st.known;
-  $("#b-batt").textContent = st.battery != null ? `${st.battery}%` : "连接后显示";
-  $("#b-fw").textContent = st.firmware || "连接后显示";
+  $("#b-batt").textContent = st.battery != null ? `${st.battery}%` : t("after_connect");
+  $("#b-fw").textContent = st.firmware || t("after_connect");
   const sl = $("#b-sleep");
   sl.disabled = !on || st.sleep == null;
-  $("#b-sleep-note").textContent = sl.disabled ? "连接键盘后才能修改" : "时间越长越耗电";
+  $("#b-sleep-note").textContent = sl.disabled ? t("sleep_disabled") : t("sleep_note");
   if (st.sleep == null) {
     if (![...sl.options].some(o => o.value === "")) sl.add(new Option("", ""), 0);
     sl.value = "";
   } else {
     const blank = [...sl.options].find(o => o.value === ""); if (blank) blank.remove();
-    if (![...sl.options].some(o => +o.value === st.sleep)) sl.add(new Option(`${Math.round(st.sleep / 60)} 分钟`, st.sleep));
+    if (![...sl.options].some(o => +o.value === st.sleep)) sl.add(new Option(t("sleep_custom", { n: Math.round(st.sleep / 60) }), st.sleep));
     sl.value = st.sleep;
   }
   $("#cal-btn").disabled = !on && !calibrating;
-  if (!calibrating) $("#cal-msg").textContent = on ? "按提示转一格旋钮,Vibar 会自动校正" : "连接键盘后才能校准";
+  $("#cal-btn").textContent = calibrating ? t("cal_cancel") : t("cal_btn");
+  if (!calibrating && !calState) $("#cal-msg").textContent = on ? t("cal_note") : t("cal_need");
+  if (calibrating) $("#cal-msg").textContent = t("cal_prompt");
   const mic = st.mic || { state: "off", installed: false };
-  const names = { off: "未启用", installing: "正在安装", waiting: "已启用,等待键盘", idle: "已启用,没有 App 在录音", inuse: "正在被 App 使用" };
-  $("#m-state").textContent = names[mic.state] || "";
+  $("#m-state").textContent = t("mic_state_" + mic.state);
   $("#m-switch").classList.toggle("on", mic.state !== "off" && mic.state !== "installing");
   $("#m-switch").disabled = mic.state === "installing";
   $("#m-remove").disabled = !mic.installed || mic.state === "installing";
@@ -471,16 +493,18 @@ function renderState() {
   $("#g-path").textContent = st.configPath || "";
   renderTabs();
 }
+let calState = "";   // result message of the last calibration, shown until the next state change
 
-/* ---------- 来自程序的消息 ---------- */
+/* ---------- Messages from the app ---------- */
 window.__host = m => {
-  if (m.t === "config") { cfg = m.config; cfg.bindings = cfg.bindings || {}; cfg.modes = cfg.modes || {}; render(); }
+  if (m.t === "config") { cfg = m.config; cfg.bindings = cfg.bindings || {}; cfg.modes = cfg.modes || {}; applyStrings(); render(); }
+  else if (m.t === "lang") { window.__lang = m.lang; window.__strings = m.strings; applyStrings(); render(); renderState(); }
   else if (m.t === "state") { st = m.state; renderState(); }
   else if (m.t === "mode") { st.mode = m.mode; renderTabs(); }
   else if (m.t === "notice") toast(m.text);
   else if (m.t === "saved") {
     const s = $("#saved");
-    s.textContent = m.warnings && m.warnings.length ? "已保存,有设置无效" : "已保存";
+    s.textContent = m.warnings && m.warnings.length ? t("saved_warn") : t("saved");
     s.classList.add("show"); setTimeout(() => s.classList.remove("show"), 1400);
     if (m.warnings && m.warnings.length) toast(m.warnings[0]);
   }
@@ -488,12 +512,18 @@ window.__host = m => {
     const el = $(`.in[data-in="${m.name}"]`);
     if (el) { el.classList.add("live"); setTimeout(() => el.classList.remove("live"), 380); }
     if (calibrating && (m.name === "knob_ccw" || m.name === "knob_cw")) {
-      calibrating = false; $("#cal-btn").textContent = "校准";
-      if (m.name === "knob_ccw") { cfg.knob_swap = !cfg.knob_swap; changed(); $("#cal-msg").textContent = "已校正,方向已对调"; }
-      else $("#cal-msg").textContent = "方向本来就是对的";
+      calibrating = false;
+      if (m.name === "knob_ccw") { cfg.knob_swap = !cfg.knob_swap; changed(); calState = "cal_done"; }
+      else calState = "cal_ok";
+      renderState();
+      $("#cal-msg").textContent = t(calState);
+      setTimeout(() => { calState = ""; renderState(); }, 4000);
     }
   }
 };
+applyStrings();
+render();
+renderState();
 send({ t: "load" });
 if (window.__page) $(`.nav[data-page="${window.__page}"]`)?.click();
 if (window.__layer) { layer = window.__layer; if (window.__sel) sel = window.__sel; setTimeout(render, 150); }

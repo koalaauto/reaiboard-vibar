@@ -1,10 +1,13 @@
-# 键盘上每个输入对应什么操作,保存后约 1 秒自动生效。
-# 一般不用手改,在 Vibar 的设置窗口里点选更方便。
+# What each input on the keyboard does. A saved change applies within about a second.
+# You rarely need to edit this by hand, the Vibar settings window is easier.
 #
-#   "cmd+n"                        按一次快捷键
-#   { hold = "f18" }               按住期间保持按下
-#   { media = "volume_up" }        媒体键 volume_up volume_down mute play_pause
-#   { shell = "open -a Safari" }   运行命令
+#   "cmd+n"                        press a shortcut once
+#   { hold = "f18" }               hold it while the key is down
+#   { media = "volume_up" }        media key: volume_up, volume_down, mute, play_pause
+#   { shell = "open -a Safari" }   run a command
+#
+# Interface language, "auto" follows the system. Other values are "en" and "zh-CN".
+# language = "auto"
 
 [bindings]
 knob_ccw   = "up"

@@ -42,7 +42,7 @@ Notes:
 
 - Over Bluetooth the keyboard is **not** a standard HID keyboard. A program must subscribe to its GATT notifications. System pairing is unnecessary and harmful: a system-paired keyboard stays connected to the system and stops advertising.
 - It does **not advertise** while a USB cable is plugged in, and not while asleep. A key press wakes it and it starts advertising again.
-- One central at a time. Whoever connects first holds it. To hand it over, disconnect on the first computer (Vibar: *断开键盘*).
+- One central at a time. Whoever connects first holds it. To hand it over, disconnect on the first computer (Vibar: *Disconnect Keyboard*).
 - The SDK does not connect by name prefix on its own in a Bluetooth-only setup. Scan first, then connect to a named device. Vibar scans until something appears, then connects.
 - Reconnect after sleep worked in our tests without intervention.
 - Handshake in our tests: mode `Legacy`, no host binding.
