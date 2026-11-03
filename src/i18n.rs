@@ -77,12 +77,16 @@ pub enum Msg {
     SettingsMenu,
     About,
     Quit,
+    /// Launch at login was switched on while the app is not in an Applications folder.
+    AutostartNeedsApplications,
     EditMenu,
     WindowMenu,
     SettingsWindowTitle,
     // Status lines
     Searching,
     WakeHint,
+    /// Shown after searching for a while: the keyboard may be held by another computer.
+    SearchHint,
     Connecting,
     Connected,
     ReadingInfo,
@@ -99,19 +103,31 @@ pub enum Msg {
     SleepSetFailed(String),
     // Config notices
     ConfigUpdated(usize),
-    ConfigUpdatedWithInvalid { count: usize, first: String },
-    ConfigInvalid { count: usize, first: String },
+    ConfigUpdatedWithInvalid {
+        count: usize,
+        first: String,
+    },
+    ConfigInvalid {
+        count: usize,
+        first: String,
+    },
     KeepingPrevious(String),
     UsingDefaults(String),
     ConfigLineError(usize),
     ConfigFormatError,
     // Config entries that cannot be used
-    LabelInMode { mode: String, name: String },
+    LabelInMode {
+        mode: String,
+        name: String,
+    },
     LabelOnEnter(String),
     LabelOnLeave(String),
     NotAnInput(String),
     NotAMode(String),
-    InvalidEntry { label: String, reason: String },
+    InvalidEntry {
+        label: String,
+        reason: String,
+    },
     UnknownKey(String),
     UnknownModifier(String),
     UnknownMedia(String),
@@ -142,11 +158,13 @@ impl Msg {
             SettingsMenu => "Settings…".into(),
             About => "About Vibar".into(),
             Quit => "Quit Vibar".into(),
+            AutostartNeedsApplications => "Move Vibar to the Applications folder first, then turn this on".into(),
             EditMenu => "Edit".into(),
             WindowMenu => "Window".into(),
             SettingsWindowTitle => "Vibar Settings".into(),
             Searching => "Searching for the keyboard…".into(),
             WakeHint => "Press any key to wake the keyboard".into(),
+            SearchHint => "Still not found, is another computer connected to it?".into(),
             Connecting => "Connecting…".into(),
             Connected => "Connected".into(),
             ReadingInfo => "Reading device info…".into(),
@@ -197,11 +215,13 @@ impl Msg {
             SettingsMenu => "设置…".into(),
             About => "关于 Vibar".into(),
             Quit => "退出 Vibar".into(),
+            AutostartNeedsApplications => "请先把 Vibar 拖进应用程序文件夹,再打开这个开关".into(),
             EditMenu => "编辑".into(),
             WindowMenu => "窗口".into(),
             SettingsWindowTitle => "Vibar 设置".into(),
             Searching => "正在搜索键盘…".into(),
             WakeHint => "按任意键唤醒键盘".into(),
+            SearchHint => "还没找到,是不是被别的电脑连着了?".into(),
             Connecting => "正在连接…".into(),
             Connected => "已连接".into(),
             ReadingInfo => "正在读取设备信息…".into(),
@@ -260,11 +280,13 @@ mod tests {
             SettingsMenu,
             About,
             Quit,
+            AutostartNeedsApplications,
             EditMenu,
             WindowMenu,
             SettingsWindowTitle,
             Searching,
             WakeHint,
+            SearchHint,
             Connecting,
             Connected,
             ReadingInfo,
@@ -317,7 +339,7 @@ mod tests {
 
     #[test]
     fn every_variant_has_a_sample() {
-        // Counting variants through the Debug names found in the source keeps this honest.
+        // Count the variants declared in this very file, so the sample list cannot silently fall behind.
         let src = include_str!("i18n.rs");
         let enum_body = src
             .split("pub enum Msg {")
@@ -326,10 +348,19 @@ mod tests {
             .split("\n}\n")
             .next()
             .unwrap();
+        // A variant declaration is a line indented by exactly four spaces that starts with a
+        // capital letter. Fields (eight spaces), closing braces and comments do not count, so
+        // rustfmt reflowing a struct variant over several lines does not change the number.
         let declared = enum_body
             .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty() && !l.starts_with("//"))
+            .filter(|l| {
+                l.starts_with("    ")
+                    && !l.starts_with("     ")
+                    && l.trim_start()
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_uppercase())
+            })
             .count();
         assert_eq!(
             declared,

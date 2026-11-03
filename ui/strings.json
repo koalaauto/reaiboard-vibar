@@ -10,6 +10,7 @@
     "st_not_connected": "Not connected",
     "st_released": "Disconnected",
     "st_wake": "Press any key to wake the keyboard",
+    "st_hint": "Not found yet. Check that Bluetooth is allowed for Vibar and that no other computer is connected to the keyboard.",
     "st_others": "Other computers can connect",
     "st_battery": "Battery {n}%",
 
@@ -128,6 +129,7 @@
     "st_not_connected": "未连接",
     "st_released": "已断开",
     "st_wake": "按任意键唤醒键盘",
+    "st_hint": "还没找到。请确认已允许 Vibar 使用蓝牙,并且没有别的电脑连着键盘。",
     "st_others": "别的电脑可以连接",
     "st_battery": "电量 {n}%",
 

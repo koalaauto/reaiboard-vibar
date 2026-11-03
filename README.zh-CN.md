@@ -18,7 +18,7 @@
 
 ## 快速开始
 
-需要 macOS 12 以上、[Rust](https://rustup.rs) 1.87 以上、`cmake`(`brew install cmake`,用来编译虚拟麦克风驱动)。暂时没有预编译版本。
+需要 macOS 12 以上、[Rust](https://rustup.rs) 1.87 以上、`cmake`(`brew install cmake`,用来编译虚拟麦克风驱动)。暂时没有公开发布的版本。`scripts/dmg.sh` 可以打出磁盘映像,广泛分发前还缺什么见 [docs/releasing.md](docs/releasing.md)。
 
 ```bash
 git clone https://github.com/koalaauto/reaiboard-vibar.git
@@ -56,6 +56,16 @@ scripts/bundle.sh --run      # 构建 build/Vibar.app 并启动
 | 语音键 | 按住 `F18` |
 
 把你的语音输入工具的按住说话快捷键设成 **按住 F18**,语音键就成了说话键。所有设置保存在一个 TOML 文件里:[docs/configuration.md](docs/configuration.md)。
+
+## 在多台电脑上使用同一块键盘
+
+键盘**同一时间只连一台电脑**。它连着你的电脑时会停止广播,别的电脑就看不到它。要交给别人:
+
+1. 在现在连着的那台电脑上,点菜单里的**断开键盘**,或者直接退出 Vibar。之后 Vibar 不会再自动重连。
+2. 在键盘上按任意键,让它醒来并重新广播。
+3. 在另一台电脑上打开 Vibar,它会找到键盘并连上。如果大约 15 秒还没找到,它会提示键盘可能被别的电脑占着。
+
+要拿回来就反过来操作一遍。两台电脑的「系统设置 → 蓝牙」里都不能配对过这块键盘。*让给第二台电脑这一步还没有用两台电脑实测过。*
 
 ## 状态
 
@@ -126,7 +136,9 @@ Vibar 需要**蓝牙**(和键盘通信)和**辅助功能**(替你按键)。macOS
 | [docs/configuration.md](docs/configuration.md) | 配置文件参考(英文) |
 | [docs/hardware.md](docs/hardware.md) | 我们对键盘的了解:输入、蓝牙行为、休眠、麦克风(英文) |
 | [docs/design-principles.md](docs/design-principles.md) | 界面文字和图标规范(英文) |
-| [docs/signing-and-permissions.md](docs/signing-and-permissions.md) | 签名、权限、发布(英文) |
+| [docs/signing-and-permissions.md](docs/signing-and-permissions.md) | 签名和权限(英文) |
+| [docs/releasing.md](docs/releasing.md) | 磁盘映像、谁能直接打开、发版清单(英文) |
+| [CHANGELOG.md](CHANGELOG.md) | 变更记录(英文) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 环境、本地 CI、约定(英文) |
 | [AGENTS.md](AGENTS.md) | 给 AI 编程助手的说明(英文) |
 

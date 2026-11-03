@@ -54,6 +54,8 @@ pub struct Snapshot {
     pub mic: Option<MicState>,
     pub mic_installed: bool,
     pub autostart: bool,
+    /// Searching for a while without finding the keyboard.
+    pub search_hint: bool,
 }
 
 impl Snapshot {
@@ -75,6 +77,7 @@ impl Snapshot {
             "sleep": self.sleep,
             "mic": { "state": mic, "installed": self.mic_installed },
             "autostart": self.autostart,
+            "searchHint": self.search_hint,
             "configPath": config::config_path().display().to_string(),
         })
     }
@@ -291,6 +294,7 @@ mod tests {
             "sleep",
             "mic",
             "autostart",
+            "searchHint",
             "configPath",
         ] {
             assert!(v.get(key).is_some(), "{key}");

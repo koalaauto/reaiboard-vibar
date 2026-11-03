@@ -480,7 +480,7 @@ $("#cal-btn").onclick = () => { calibrating = !calibrating; renderState(); };
 function renderState() {
   const on = !!st.connected;
   $("#st-main").innerHTML = `<span class="dot ${on ? "on" : ""}"></span>${st.released ? t("st_released") : on ? t("st_connected") : t("st_not_connected")}`;
-  $("#st-sub").textContent = st.released ? t("st_others") : on ? (st.battery != null ? t("st_battery", { n: st.battery }) : "") : t("st_wake");
+  $("#st-sub").textContent = st.released ? t("st_others") : on ? (st.battery != null ? t("st_battery", { n: st.battery }) : "") : (st.searchHint ? t("st_hint") : t("st_wake"));
   $("#b-conn").textContent = st.released ? t("conn_released") : on ? t("st_connected") : t("st_not_connected");
   $("#b-release").textContent = st.released ? t("btn_connect") : t("btn_disconnect");
   $("#b-release").disabled = !st.known;

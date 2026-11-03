@@ -43,6 +43,8 @@ If you run `target/release/vibar` from a terminal or an IDE, macOS attributes th
 
 ## Releasing to other people (not done yet)
 
+The release checklist and the open items are in [releasing.md](releasing.md). The signing part is below.
+
 Anyone downloading a build needs it to be signed with a **Developer ID Application** certificate and **notarized**, otherwise Gatekeeper blocks it. This requires a paid Apple Developer Program membership. Outline:
 
 1. Sign with the hardened runtime: `codesign --force --options runtime --sign "Developer ID Application: …" build/Vibar.app`.

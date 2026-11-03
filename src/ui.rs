@@ -22,6 +22,14 @@ use crate::settings::{self, SettingsWindow, Snapshot};
 
 pub const APP_NAME: &str = "Vibar";
 
+/// After this long without finding the keyboard, say what else could be wrong.
+const SEARCH_HINT_AFTER: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Whether a search that started `elapsed` ago deserves the longer hint.
+fn search_hint_due(elapsed: std::time::Duration) -> bool {
+    elapsed >= SEARCH_HINT_AFTER
+}
+
 /// 后台线程发给界面的消息
 #[derive(Debug, Clone)]
 pub enum UiEvent {
@@ -403,6 +411,7 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
         ..Default::default()
     };
     let mut settings: Option<SettingsWindow> = None;
+    let mut search_since: Option<std::time::Instant> = None;
 
     event_loop.run(move |event, target, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -422,18 +431,28 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
             UiEvent::Status(s) => {
                 match s {
                     Status::Searching => {
+                        let since = *search_since.get_or_insert_with(std::time::Instant::now);
+                        snap.search_hint = search_hint_due(since.elapsed());
                         mu.set_status(Msg::Searching);
-                        mu.set_detail(Line::Msg(Msg::WakeHint));
+                        mu.set_detail(Line::Msg(if snap.search_hint {
+                            Msg::SearchHint
+                        } else {
+                            Msg::WakeHint
+                        }));
                         snap.connected = false;
                         icons.set_base(false, &tray);
                     }
                     Status::Connecting => {
+                        search_since = None;
+                        snap.search_hint = false;
                         mu.release_item.set_enabled(true);
                         snap.known = true;
                         mu.set_status(Msg::Connecting);
                         mu.set_detail(Line::Raw(String::new()));
                     }
                     Status::Connected => {
+                        search_since = None;
+                        snap.search_hint = false;
                         mu.set_status(Msg::Connected);
                         mu.set_detail(Line::Msg(Msg::ReadingInfo));
                         snap.connected = true;
@@ -450,12 +469,16 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
                         snap.mic_installed = installed;
                     }
                     Status::Disconnected => {
+                        search_since = None;
+                        snap.search_hint = false;
                         mu.set_status(Msg::Disconnected);
                         mu.set_detail(Line::Msg(Msg::WaitingReconnect));
                         snap.connected = false;
                         icons.set_base(false, &tray);
                     }
                     Status::Released(on) => {
+                        search_since = None;
+                        snap.search_hint = false;
                         snap.released = on;
                         put(
                             &mu.release_item,
@@ -590,7 +613,9 @@ fn handle_settings_message(
         "mic_remove" => (handlers.remove_mic)(),
         "autostart" => {
             let want = msg["on"].as_bool().unwrap_or(false);
-            if let Err(e) = crate::autostart::set_enabled(want) {
+            if want && !crate::autostart::can_enable() {
+                w.post(&json!({ "t": "notice", "text": Msg::AutostartNeedsApplications.text() }));
+            } else if let Err(e) = crate::autostart::set_enabled(want) {
                 eprintln!("[settings] launch at login: {e}");
             }
             snap.autostart = crate::autostart::enabled();
@@ -615,6 +640,17 @@ fn handle_settings_message(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn the_search_hint_appears_only_after_fifteen_seconds() {
+        assert!(!search_hint_due(Duration::from_secs(0)));
+        assert!(!search_hint_due(Duration::from_secs(14)));
+        assert!(search_hint_due(Duration::from_secs(15)));
+        assert!(search_hint_due(Duration::from_secs(300)));
+    }
+
     #[test]
     fn builtin_icons_decode_to_46x36_rgba() {
         for bytes in [

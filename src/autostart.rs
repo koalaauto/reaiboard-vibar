@@ -1,5 +1,5 @@
-//! 开机自启:用户级 LaunchAgent(~/Library/LaunchAgents),不需要管理员权限。
-//! 只在用户在菜单里勾选时创建,取消勾选时删除;不会在后台悄悄安装任何东西。
+//! Launch at login through a user LaunchAgent (~/Library/LaunchAgents), no administrator rights.
+//! It is only created when the user switches it on and removed when they switch it off.
 
 use std::path::{Path, PathBuf};
 
@@ -18,7 +18,28 @@ pub fn enabled() -> bool {
     plist_path().exists()
 }
 
-/// 当前所在的 .app 包路径(从 Contents/MacOS/<exe> 往上三级);不在 .app 里则为 None
+/// Launch at login records the app's path, so it only makes sense once the app has been moved to
+/// an Applications folder. Run from a disk image or the Downloads folder, the path would be
+/// temporary and login would silently start nothing.
+fn location_allows_autostart(exe: &Path, home: &str) -> bool {
+    match bundle_path(exe) {
+        // A bare binary is a development build, the user knows what they are doing.
+        None => true,
+        Some(app) => {
+            app.starts_with("/Applications")
+                || app.starts_with(Path::new(home).join("Applications"))
+        }
+    }
+}
+
+/// Whether the running app sits somewhere that launch at login can point to.
+pub fn can_enable() -> bool {
+    let home = std::env::var("HOME").unwrap_or_default();
+    std::env::current_exe().is_ok_and(|exe| location_allows_autostart(&exe, &home))
+}
+
+/// The .app bundle the executable lives in (three levels up from Contents/MacOS/<exe>), or None
+/// when it is not inside an .app.
 fn bundle_path(exe: &Path) -> Option<PathBuf> {
     let app = exe.parent()?.parent()?.parent()?;
     (app.extension()? == "app").then(|| app.to_path_buf())
@@ -30,7 +51,8 @@ fn xml_escape(s: &str) -> String {
         .replace('>', "&gt;")
 }
 
-/// 生成 LaunchAgent 内容。在 .app 里时用 `open -a` 启动,这样蓝牙/辅助功能权限按 App 身份计算。
+/// The LaunchAgent contents. Inside an .app it starts the bundle with `open -a`, so Bluetooth and
+/// Accessibility permissions are attributed to the app.
 fn render_plist(exe: &Path) -> String {
     let args: Vec<String> = match bundle_path(exe) {
         Some(app) => vec![
@@ -74,6 +96,25 @@ pub fn set_enabled(on: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn autostart_is_only_allowed_from_an_applications_folder() {
+        let h = "/Users/me";
+        for ok in [
+            "/Applications/Vibar.app/Contents/MacOS/vibar",
+            "/Users/me/Applications/Vibar.app/Contents/MacOS/vibar",
+            "/usr/local/bin/vibar", // a bare development binary
+        ] {
+            assert!(location_allows_autostart(Path::new(ok), h), "{ok}");
+        }
+        for bad in [
+            "/Volumes/Vibar 0.1.0/Vibar.app/Contents/MacOS/vibar",
+            "/Users/me/Downloads/Vibar.app/Contents/MacOS/vibar",
+            "/private/var/folders/xx/AppTranslocation/ABC/d/Vibar.app/Contents/MacOS/vibar",
+        ] {
+            assert!(!location_allows_autostart(Path::new(bad), h), "{bad}");
+        }
+    }
 
     #[test]
     fn bundle_path_is_found_inside_app() {

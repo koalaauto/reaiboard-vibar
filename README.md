@@ -19,7 +19,7 @@ English | [简体中文](README.zh-CN.md)
 
 ## Quick start
 
-Needs macOS 12+, [Rust](https://rustup.rs) 1.87+ and `cmake` (`brew install cmake`, it builds the virtual microphone driver). No prebuilt release yet.
+Needs macOS 12+, [Rust](https://rustup.rs) 1.87+ and `cmake` (`brew install cmake`, it builds the virtual microphone driver). There is no public release yet. `scripts/dmg.sh` builds a disk image, see [docs/releasing.md](docs/releasing.md) for what is still missing before one can be shared widely.
 
 ```bash
 git clone https://github.com/koalaauto/reaiboard-vibar.git
@@ -57,6 +57,16 @@ Then:
 | Voice key | hold `F18` |
 
 Set your push-to-talk or dictation tool to **hold F18** and the voice key becomes a talk button. Everything is stored in one TOML file: [docs/configuration.md](docs/configuration.md).
+
+## Using the keyboard on more than one computer
+
+The keyboard connects to **one computer at a time**. While it is connected to yours it stops advertising, so another computer cannot see it. To hand it over:
+
+1. On the computer that has it, choose **Disconnect Keyboard** in the menu, or quit Vibar. Vibar then stops reconnecting by itself.
+2. Press any key on the keyboard so it wakes up and advertises again.
+3. On the other computer, open Vibar. It finds the keyboard and connects. If it has not found it after about 15 seconds, it says the keyboard may be held by another computer.
+
+To take it back, do the same the other way round. The keyboard must not be paired in System Settings → Bluetooth on either computer. *Hand-over has not been tested with two computers yet.*
 
 ## Status
 
@@ -127,7 +137,9 @@ Vibar needs **Bluetooth** (to talk to the keyboard) and **Accessibility** (to pr
 | [docs/configuration.md](docs/configuration.md) | Config file reference |
 | [docs/hardware.md](docs/hardware.md) | What we learned about the keyboard: inputs, Bluetooth behavior, sleep, microphone |
 | [docs/design-principles.md](docs/design-principles.md) | UI copy and icon rules |
-| [docs/signing-and-permissions.md](docs/signing-and-permissions.md) | Code signing, permissions, releasing |
+| [docs/signing-and-permissions.md](docs/signing-and-permissions.md) | Code signing and permissions |
+| [docs/releasing.md](docs/releasing.md) | Disk image, who can open it, release checklist |
+| [CHANGELOG.md](CHANGELOG.md) | What changed |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, local CI, conventions |
 | [AGENTS.md](AGENTS.md) | Guide for AI coding agents working in this repo |
 
