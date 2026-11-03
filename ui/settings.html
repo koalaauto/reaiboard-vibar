@@ -74,11 +74,23 @@ input[type=text] { width: 100%; }
 .board { display: grid; grid-template-columns: auto 1fr; gap: 26px; align-items: start; padding: 20px; }
 .board .cap { color: var(--sub); font-size: 12px; margin-bottom: 8px; }
 .knob { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
-.keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+/* Same arrangement as the keyboard: ENTER is a tall key on the right, ACTION is a wide key. */
+.keys { display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(2, auto); gap: 10px; }
+.keys .k-tab { grid-column: 1; grid-row: 1; }
+.keys .k-new { grid-column: 2; grid-row: 1; }
+.keys .k-esc { grid-column: 3; grid-row: 1; }
+.keys .k-enter { grid-column: 4; grid-row: 1 / span 2; }
+.keys .k-voice { grid-column: 1; grid-row: 2; }
+.keys .k-action { grid-column: 2 / span 2; grid-row: 2; }
 .in { position: relative; border: 1px solid var(--line); background: var(--key); border-radius: 10px; min-height: 58px;
   padding: 8px 6px; text-align: center; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
 .in:hover { background: var(--key-hover); }
 .in .n { font-size: 11px; color: var(--sub); }
+/* The legend printed on the keycap: capital letters, or the microphone symbol. */
+.keys .in .n { font-size: 11px; font-weight: 600; letter-spacing: .08em; }
+.keys .in .n svg { width: 15px; height: 15px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
+.dotc { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.dotc.yolo { background: #ff3b30; } .dotc.chat { background: #0a84ff; } .dotc.plan { background: #34c759; }
 .in .v { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .in.round { width: 66px; min-height: 66px; border-radius: 50%; padding: 4px; }
 .in.big { width: 82px; min-height: 82px; }
@@ -139,12 +151,12 @@ kbd { display: inline-block; min-width: 24px; padding: 1px 7px; margin-right: 4p
         <div>
           <div class="cap" data-i18n="cap_keys"></div>
           <div class="keys">
-            <button class="in" data-in="tab"><span class="n">Tab</span><span class="v"></span></button>
-            <button class="in" data-in="new"><span class="n">New</span><span class="v"></span></button>
-            <button class="in" data-in="esc"><span class="n">Esc</span><span class="v"></span></button>
-            <button class="in" data-in="voice"><span class="n" data-i18n="in_voice"></span><span class="v"></span></button>
-            <button class="in" data-in="action"><span class="n">Action</span><span class="v"></span></button>
-            <button class="in" data-in="enter"><span class="n">Enter</span><span class="v"></span></button>
+            <button class="in k-tab" data-in="tab"><span class="n">TAB</span><span class="v"></span></button>
+            <button class="in k-new" data-in="new"><span class="n">NEW</span><span class="v"></span></button>
+            <button class="in k-esc" data-in="esc"><span class="n">ESC</span><span class="v"></span></button>
+            <button class="in k-enter" data-in="enter"><span class="n">ENTER</span><span class="v"></span></button>
+            <button class="in k-voice" data-in="voice" data-i18n-title="in_voice"><span class="n"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.6" y="1.5" width="4.8" height="8" rx="2.4"/><path d="M3.2 7.6a4.8 4.8 0 0 0 9.6 0M8 12.4v2.1"/></svg></span><span class="v"></span></button>
+            <button class="in k-action" data-in="action"><span class="n">ACTION</span><span class="v"></span></button>
           </div>
         </div>
       </div>
@@ -205,7 +217,10 @@ const SLEEP = [600, 1800, 3600, 14400, 43200];
 const MOD_SYM = { cmd: "⌘", shift: "⇧", alt: "⌥", ctrl: "⌃" };
 const TYPES = ["key", "hold", "media", "shell", "none"];
 const LABEL_KEY = { knob_ccw: "lbl_knob_ccw", knob_cw: "lbl_knob_cw", knob_press: "lbl_knob_press", voice: "lbl_voice" };
-const LITERAL_LABEL = { tab: "Tab", new: "New", esc: "Esc", action: "Action", enter: "Enter" };
+// Keycap legends as printed on the keyboard
+const LITERAL_LABEL = { tab: "TAB", new: "NEW", esc: "ESC", action: "ACTION", enter: "ENTER" };
+// Lever positions in the order of the indicator lights on the keyboard, top to bottom
+const LEVER_ORDER = ["yolo", "chat", "plan"];
 
 let cfg = { bindings: {}, modes: {} };
 let st = {};
@@ -231,6 +246,7 @@ function applyStrings() {
   document.documentElement.lang = window.__lang === "zh-CN" ? "zh-CN" : "en";
   document.title = t("page_title");
   $$("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  $$("[data-i18n-title]").forEach(el => { el.title = t(el.dataset.i18nTitle); });
   $$("[data-i18n-ph]").forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
   $("#g-version").textContent = t("about_version", { v: window.__v });
   const lang = $("#g-lang");
@@ -310,9 +326,10 @@ function keycaps(value) {
 
 function renderTabs() {
   const box = $("#layer-tabs"); box.innerHTML = "";
-  for (const m of ["default", "chat", "yolo", "plan"]) {
+  for (const m of ["default", ...LEVER_ORDER]) {
     const b = document.createElement("button");
-    b.textContent = modeName(m);
+    if (m !== "default") { const d = document.createElement("i"); d.className = "dotc " + m; b.appendChild(d); }
+    b.appendChild(document.createTextNode(modeName(m)));
     if (m === layer) b.classList.add("on");
     if (m === st.mode) { const c = document.createElement("span"); c.className = "cur"; c.textContent = t("tag_current"); b.appendChild(c); }
     b.onclick = () => { layer = m; render(); };

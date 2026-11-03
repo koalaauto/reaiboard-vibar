@@ -32,6 +32,7 @@ There is no GitHub Actions workflow on purpose. `scripts/ci.sh` is the CI. Run i
 6. **Icons come from `scripts/make-icons.py`.** Edit the script, regenerate, commit both.
 7. **The repository URL lives only in `Cargo.toml`.** Rust reads `env!("CARGO_PKG_REPOSITORY")`, the page and bundle script read it from there.
 8. **The sink for microphone audio is installed before the SDK `start()`.**
+9. **The board drawing in the settings page mirrors the real keyboard** (arrangement, capital keycap legends, microphone symbol on the voice key, lever order YOLO, CHAT, PLAN). Check `docs/hardware.md` before changing it.
 
 ## Working safely on this machine
 

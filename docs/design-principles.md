@@ -44,6 +44,7 @@ All icons are produced by `scripts/make-icons.py` from one geometry definition. 
 
 ## Settings window
 
+- **Draw the keyboard as it is.** The board in the Keys page copies the real arrangement (knob on the left, tall ENTER, wide ACTION) and the legends printed on the keycaps: capital letters TAB, NEW, ESC, ACTION, ENTER, and a microphone symbol for the voice key. Lever tabs follow the order of the lit labels on the keyboard, YOLO, CHAT, PLAN, with their colours. A user should never have to translate between the screen and the keyboard in their hands. The reference is `docs/hardware.md`.
 - Sidebar of four pages with icons, status card and version at the bottom.
 - **Autosave.** No Save button. A small "Saved" fades in near the layer tabs.
 - A layer other than "All positions" shows inherited keys dimmed and overridden keys with a blue dot, with a *Follow All positions* button to drop an override.

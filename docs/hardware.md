@@ -15,22 +15,39 @@ Notes on the ReAI-Vibe-Board as seen by Vibar. Sources: the maker's [website](ht
 
 ## Inputs
 
+### Physical layout
+
+From the maker's product photo. The settings window draws the same arrangement.
+
+```
+              TAB   NEW   ESC   ┌───────┐      ┌──────────┐
+   (knob)                       │ ENTER │      │  YOLO    │  red
+                MIC  [ ACTION ] │       │      │  CHAT    │  blue
+                                └───────┘      │  PLAN    │  green
+                                               └──────────┘  lever, toggle with a red cover
+```
+
+- The knob is on the left. ENTER is a tall key on the right, ACTION is a wide key, and the voice key carries a **microphone symbol, not text**. The other keycaps read **TAB, NEW, ESC, ACTION, ENTER** in capital letters.
+- The lever has three lit labels, top to bottom: **YOLO, CHAT, PLAN**.
+
+### Input slots
+
 Twelve input slots, reported by the SDK as `key_index` 0 to 11. Over Bluetooth every press arrives as two events: *pressed* (source Consumer, a usage code `0x0F01` to `0x0F0B`) and *released* (source Gatt, value 0). There are no repeat events while held; time a long press yourself.
 
-| key_index | Firmware label | Physical input | Vibar name |
-|---|---|---|---|
-| 0 | volume phase A | knob, one direction | `knob_ccw` (until calibrated) |
-| 1 | volume phase B | knob, other direction | `knob_cw` (until calibrated) |
-| 2 | volume press | knob pressed | `knob_press` |
-| 3 | Tab | key | `tab` |
-| 4 | New | key | `new` |
-| 5 | Esc | key | `esc` |
-| 6 | AI voice | key. Also reported as a separate `AiVoiceKey` event. | `voice` |
-| 7 | Action | key | `action` |
-| 8 | Enter | key | `enter` |
-| 9 | YOLO lever | lever moved to YOLO | handled through `ModeChange` |
-| 10 | PLAN lever | lever moved to PLAN | handled through `ModeChange` |
-| 11 | CHAT lever | slot exists. Moving back to CHAT produced **no key event** in our tests, only `ModeChange(CHAT)`. | handled through `ModeChange` |
+| key_index | Firmware label | Keycap legend | Physical input | Vibar name |
+|---|---|---|---|---|
+| 0 | volume phase A | none | knob, one direction | `knob_ccw` (until calibrated) |
+| 1 | volume phase B | none | knob, other direction | `knob_cw` (until calibrated) |
+| 2 | volume press | none | knob pressed | `knob_press` |
+| 3 | Tab | TAB | key | `tab` |
+| 4 | New | NEW | key | `new` |
+| 5 | Esc | ESC | key | `esc` |
+| 6 | AI voice | microphone symbol | key. Also reported as a separate `AiVoiceKey` event. | `voice` |
+| 7 | Action | ACTION | wide key | `action` |
+| 8 | Enter | ENTER | tall key | `enter` |
+| 9 | YOLO lever | YOLO | lever moved to YOLO | handled through `ModeChange` |
+| 10 | PLAN lever | PLAN | lever moved to PLAN | handled through `ModeChange` |
+| 11 | CHAT lever | CHAT | slot exists. Moving back to CHAT produced **no key event** in our tests, only `ModeChange(CHAT)`. | handled through `ModeChange` |
 
 Notes:
 

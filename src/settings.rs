@@ -377,6 +377,7 @@ mod tests {
         let html = page();
         let en = strings("en");
         let mut asked: Vec<&str> = after_all(&html, "data-i18n=\"");
+        asked.extend(after_all(&html, "data-i18n-title=\""));
         asked.extend(t_call_keys(&html));
         for key in asked {
             // `t("media_" + k)` is a family prefix, checked below
