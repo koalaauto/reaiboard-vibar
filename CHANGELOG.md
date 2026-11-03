@@ -7,7 +7,7 @@ All notable changes to Vibar. The format follows [Keep a Changelog](https://keep
 ### Added
 - English and Chinese interface that follows the system language, switchable in Settings → General.
 - A hint in the menu and the settings window when the keyboard has not been found for 15 seconds, pointing at Bluetooth permission and at another computer holding the keyboard.
-- `scripts/dmg.sh` to package the app into a disk image.
+- `scripts/dmg.sh` to package the app into a disk image, and `scripts/dmg.sh --adhoc` for internal builds that need no certificate, with a bilingual install note inside.
 - `VIBAR_CONFIG` environment variable to use another config file.
 - `docs/releasing.md`.
 

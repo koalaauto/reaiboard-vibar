@@ -30,6 +30,31 @@ Files copied by USB stick or `scp` carry no quarantine flag and open normally. T
 
 A Developer ID certificate needs a paid Apple Developer Program membership. The Apple Development certificate in your keychain cannot be used for distribution. Steps: [signing-and-permissions.md](signing-and-permissions.md).
 
+## Internal builds, no certificate needed
+
+For colleagues and testers an ad-hoc signature is enough:
+
+```bash
+scripts/bundle.sh
+scripts/dmg.sh --adhoc      # build/Vibar-<version>-<arch>-adhoc.dmg
+```
+
+`--adhoc` re-signs only the copy inside the disk image, so your own `build/Vibar.app` and its permissions stay as they are. The image also gets a bilingual *Read me first.txt* with the install steps, because nobody reads a README before double-clicking.
+
+What to expect, checked on a real build:
+
+| | Ad-hoc | Apple Development (what `bundle.sh` uses on your machine) |
+|---|---|---|
+| Signature is valid on any Mac | yes | yes |
+| Gatekeeper on a quarantined download | rejected | rejected, the same |
+| What macOS remembers permissions by | the hash of this exact build | the bundle id plus the certificate |
+| After an update | **Bluetooth and Accessibility are asked again** | still granted |
+| Depends on one person's certificate | no | yes, and it expires after a year |
+
+Both are blocked by Gatekeeper in the same way, so the recipient needs one of the workarounds above, or a copy without a quarantine flag (USB stick, `scp`, a network share). Browsers, AirDrop and most chat apps set the flag.
+
+Apple silicon only for now, see the open items.
+
 ## Open items before a public release
 
 1. **Developer ID signing and notarization** (above). Not done, never run for Vibar.

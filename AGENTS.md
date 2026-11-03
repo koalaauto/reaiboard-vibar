@@ -13,6 +13,7 @@ Vibar: a macOS menu bar app, one Rust crate, that connects to the ReAI-Vibe-Boar
 | Everything a commit needs | `scripts/ci.sh` (add `--fix` to run rustfmt first) |
 | Tests only | `cargo test --release` |
 | Build and launch the app | `scripts/bundle.sh --run` |
+| Disk image for colleagues, no certificate | `scripts/dmg.sh --adhoc`, see `docs/releasing.md` |
 | Run without a keyboard or without pressing keys | `target/release/vibar --headless --dry-run` |
 | Regenerate icons | `python3 scripts/make-icons.py` (needs Pillow and numpy) |
 
