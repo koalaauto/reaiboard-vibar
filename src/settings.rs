@@ -56,6 +56,10 @@ pub struct Snapshot {
     pub autostart: bool,
     /// Searching for a while without finding the keyboard.
     pub search_hint: bool,
+    /// Whether macOS lets us press keys. `None` until the first report.
+    pub trusted: Option<bool>,
+    /// First-run checklist finished, so the window stops showing it.
+    pub setup_done: bool,
 }
 
 impl Snapshot {
@@ -78,7 +82,10 @@ impl Snapshot {
             "mic": { "state": mic, "installed": self.mic_installed },
             "autostart": self.autostart,
             "searchHint": self.search_hint,
+            "trusted": self.trusted,
+            "setupDone": self.setup_done,
             "configPath": config::config_path().display().to_string(),
+            "logPath": crate::logfile::path().display().to_string(),
         })
     }
 }
@@ -257,6 +264,8 @@ mod tests {
             "mic_remove",
             "autostart",
             "open_config",
+            "open_log",
+            "open_accessibility",
             "about",
             "open_repo",
         ] {
@@ -295,7 +304,10 @@ mod tests {
             "mic",
             "autostart",
             "searchHint",
+            "trusted",
+            "setupDone",
             "configPath",
+            "logPath",
         ] {
             assert!(v.get(key).is_some(), "{key}");
         }

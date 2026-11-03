@@ -1,8 +1,11 @@
-//! 动作引擎:把绑定变成真实的系统按键。
-//! Enigo 不一定 Send,所以放在专用线程里,外部通过 channel 投递。
+//! Action engine. Turns bindings into real system key presses.
+//! Enigo is not necessarily Send, so it lives on a dedicated thread and callers hand it actions
+//! through a channel.
 
-use std::sync::mpsc::{self, Sender};
+use std::process::Stdio;
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::thread;
+use std::time::Duration;
 
 use anyhow::{anyhow, bail, Result};
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
@@ -10,17 +13,17 @@ use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 use crate::config::{Binding, BindingDetail};
 use crate::i18n::Msg;
 
-/// 解析后的一次系统动作
+/// One resolved system action
 #[derive(Debug, Clone)]
 pub enum Action {
-    /// 修饰键按下 → 主键点击 → 修饰键释放
+    /// Modifiers down, click the main key, modifiers up
     Click(Vec<Key>, Key),
-    /// 仅按下 / 仅释放一个组合(push-to-talk)
+    /// Only press, or only release, one combination (push-to-talk)
     Hold(Vec<Key>, Key, Direction),
     Shell(String),
 }
 
-/// 一个绑定在「按下」「松开」两个时刻各自要做的动作
+/// The actions a binding performs at press time and at release time
 #[derive(Debug, Clone, Default)]
 pub struct Resolved {
     pub on_press: Option<Action>,
@@ -126,8 +129,13 @@ fn parse_key(name: &str) -> Option<Key> {
     })
 }
 
-/// 启动执行线程;`dry_run` 时只打印不真按。
-/// 缺少「辅助功能」权限时不退出:每次动作前重试,权限状态变化通过 `on_trust` 上报。
+/// How often a missing Accessibility permission is checked again while no key is pressed.
+const TRUST_POLL: Duration = Duration::from_secs(2);
+
+/// Starts the executor thread. With `dry_run` it only prints and presses nothing.
+/// Does not exit when the Accessibility permission is missing. It checks again every couple of
+/// seconds and before every action, and reports changes through `on_trust`, so the UI notices the
+/// permission being granted without a key press.
 pub fn spawn_executor(
     dry_run: bool,
     on_trust: impl Fn(bool) + Send + 'static,
@@ -137,34 +145,27 @@ pub fn spawn_executor(
         .name("actions".into())
         .spawn(move || {
             let mut enigo: Option<Enigo> = None;
-            let mut first = true;
             let mut trusted = None::<bool>;
             if !dry_run {
-                // 启动时先探测一次(这次会弹系统授权提示),让界面一开始就知道权限状态
-                enigo = Enigo::new(&Settings::default()).ok();
-                first = false;
-                trusted = Some(enigo.is_some());
-                on_trust(enigo.is_some());
+                // The first probe shows the system permission prompt.
+                probe_trust(&mut enigo, true, &mut trusted, &on_trust);
             }
-            for action in rx {
+            loop {
+                let action = match rx.recv_timeout(TRUST_POLL) {
+                    Ok(action) => action,
+                    Err(RecvTimeoutError::Timeout) => {
+                        if !dry_run {
+                            probe_trust(&mut enigo, false, &mut trusted, &on_trust);
+                        }
+                        continue;
+                    }
+                    Err(RecvTimeoutError::Disconnected) => break,
+                };
                 if dry_run {
                     println!("[dry-run] {action:?}");
                     continue;
                 }
-                if enigo.is_none() {
-                    // 只在第一次尝试时弹系统授权提示,之后静默重试
-                    let settings = Settings {
-                        open_prompt_to_get_permissions: first,
-                        ..Default::default()
-                    };
-                    first = false;
-                    enigo = Enigo::new(&settings).ok();
-                }
-                let ok = enigo.is_some();
-                if trusted != Some(ok) {
-                    trusted = Some(ok);
-                    on_trust(ok);
-                }
+                probe_trust(&mut enigo, false, &mut trusted, &on_trust);
                 if let Err(e) = run(&mut enigo, &action) {
                     eprintln!("[action failed] {action:?}: {e}");
                 }
@@ -173,7 +174,47 @@ pub fn spawn_executor(
     Ok(tx)
 }
 
+#[link(name = "ApplicationServices", kind = "framework")]
+extern "C" {
+    fn AXIsProcessTrusted() -> u8;
+}
+
+/// Whether macOS lets this app press keys. Unlike creating an Enigo, asking does not log an error
+/// and does not show a dialog, so it is safe to ask every couple of seconds.
+fn accessibility_granted() -> bool {
+    // SAFETY: a plain query with no arguments and no side effects.
+    unsafe { AXIsProcessTrusted() != 0 }
+}
+
+/// Try to get a working Enigo if there is none yet, and report when the permission state changed.
+/// `prompt` makes macOS show its permission dialog, which is only wanted once, at startup.
+fn probe_trust(
+    enigo: &mut Option<Enigo>,
+    prompt: bool,
+    trusted: &mut Option<bool>,
+    on_trust: &impl Fn(bool),
+) {
+    // Without `prompt`, do not even try while the permission is missing: every failed attempt
+    // makes the enigo library log an error, and that would fill the log file.
+    if enigo.is_none() && (prompt || accessibility_granted()) {
+        let settings = Settings {
+            open_prompt_to_get_permissions: prompt,
+            ..Default::default()
+        };
+        *enigo = Enigo::new(&settings).ok();
+    }
+    let ok = enigo.is_some();
+    if *trusted != Some(ok) {
+        *trusted = Some(ok);
+        on_trust(ok);
+    }
+}
+
 fn run(enigo: &mut Option<Enigo>, action: &Action) -> Result<()> {
+    // A shell command presses no keys, so it must not depend on the Accessibility permission.
+    if let Action::Shell(cmd) = action {
+        return spawn_shell(cmd);
+    }
     let Some(enigo) = enigo else {
         bail!("Accessibility permission is missing, action dropped");
     };
@@ -208,19 +249,46 @@ fn run(enigo: &mut Option<Enigo>, action: &Action) -> Result<()> {
                 enigo.key(*key, *dir).map_err(|e| anyhow!("{e}"))?;
             }
         },
-        Action::Shell(cmd) => {
-            std::process::Command::new("/bin/sh")
-                .arg("-c")
-                .arg(cmd)
-                .spawn()?;
-        }
+        Action::Shell(_) => unreachable!("handled above, it needs no Accessibility"),
     }
+    Ok(())
+}
+
+/// Fire and forget. The command's own output stays out of the log file, which people attach to
+/// bug reports, and a thread waits for it so no zombie process is left.
+fn spawn_shell(cmd: &str) -> Result<()> {
+    let mut child = std::process::Command::new("/bin/sh")
+        .arg("-c")
+        .arg(cmd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+    thread::spawn(move || {
+        let _ = child.wait();
+    });
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_shell_action_still_runs_with_its_output_detached() {
+        let marker = std::env::temp_dir().join(format!("vibar-shell-{}", std::process::id()));
+        let _ = std::fs::remove_file(&marker);
+        let cmd = format!("echo to-the-void; echo done > '{}'", marker.display());
+        run(&mut None, &Action::Shell(cmd)).unwrap();
+        for _ in 0..100 {
+            if marker.exists() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(std::fs::read_to_string(&marker).unwrap().trim(), "done");
+        let _ = std::fs::remove_file(&marker);
+    }
 
     fn dbg<T: std::fmt::Debug>(v: &T) -> String {
         format!("{v:?}")

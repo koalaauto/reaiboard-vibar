@@ -21,6 +21,9 @@ Vibar @VERSION@  (internal build)
    another computer, disconnect it there first (menu > Disconnect Keyboard,
    or quit Vibar), then press any key on the keyboard.
 
+6. If something goes wrong: Vibar > Settings > General > Log file > Show in Finder,
+   then send the file vibar.log to the person who gave you this build.
+
 Needs a Mac with Apple silicon, macOS 12 or later.
 
 
@@ -44,5 +47,8 @@ Vibar @VERSION@  (内部版本)
 
 5. 键盘同一时间只连一台电脑。如果它连着另一台电脑,请先在那台电脑上断开
    (菜单里点「断开键盘」,或者退出 Vibar),再按键盘上任意键。
+
+6. 遇到问题:Vibar 菜单 > 设置 > 通用 > 日志文件 > 在访达中显示,
+   把里面的 vibar.log 发给给你这个版本的人。
 
 需要 Apple 芯片的 Mac,macOS 12 或更高版本。

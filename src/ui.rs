@@ -1,10 +1,10 @@
-//! 菜单栏外壳:tao 事件循环(必须在主线程) + tray-icon + 设置窗口。
+//! Menu bar shell: the tao event loop (main thread only), tray-icon and the settings window.
 //!
-//! 菜单只放最少的东西:状态、断开 / 连接键盘、设置、退出。其余设置都在设置窗口里。
-//! 约定:
-//! - 正常的东西不出现:权限没问题时不显示权限行。
-//! - 界面文字不用括号和冒号补充说明。
-//! - 菜单项的文字和图标只在内容真的变化时才更新,展开着的菜单被改动会被 macOS 收起。
+//! The menu holds as little as possible: status, disconnect or connect the keyboard, settings, quit. Everything else is in the settings window.
+//! Rules:
+//! - Nothing normal is shown: no permission row while the permission is fine.
+//! - No parentheses or colons to explain a text in the interface.
+//! - Text and icons of a menu item change only when the content really changes, because macOS closes an open menu that is modified.
 
 use std::io::Cursor;
 
@@ -30,15 +30,16 @@ fn search_hint_due(elapsed: std::time::Duration) -> bool {
     elapsed >= SEARCH_HINT_AFTER
 }
 
-/// 后台线程发给界面的消息
+/// Messages from the background threads to the UI.
 #[derive(Debug, Clone)]
 pub enum UiEvent {
     Status(Status),
     Trusted(bool),
-    /// 一条临时提示,显示在次要信息行,下一次状态更新时被覆盖
-    Notice(String),
+    /// The config file has a problem the user must fix (`Some`), or is fine again (`None`).
+    /// A problem is shown in the detail line until a good reload clears it.
+    ConfigProblem(Option<String>),
     Menu(MenuId),
-    /// 设置窗口里的网页发来的消息
+    /// A message from the web page in the settings window.
     Settings(String),
     /// The interface language changed (settings window or config file).
     LanguageChanged,
@@ -47,17 +48,17 @@ pub enum UiEvent {
 pub type Proxy = EventLoopProxy<UiEvent>;
 
 pub struct Handlers {
-    /// 修改键盘休眠超时秒数,依次是已连接、断开后,None 表示不改
+    /// Change the keyboard sleep timeouts in seconds, while connected and after disconnecting. `None` leaves one unchanged.
     pub set_sleep: Box<dyn Fn(Option<u16>, Option<u16>)>,
-    /// 启用或关闭麦克风
+    /// Switch the microphone on or off.
     pub set_mic: Box<dyn Fn(bool)>,
-    /// 移除麦克风驱动
+    /// Remove the microphone driver.
     pub remove_mic: Box<dyn Fn()>,
-    /// 断开键盘 true,或重新连接 false,用于把键盘借给别的电脑
+    /// Disconnect the keyboard (`true`) or connect it again (`false`), to lend it to another computer.
     pub set_released: Box<dyn Fn(bool)>,
 }
 
-/// 当前应显示哪张图标。语音键按住时的黄点图标和普通图标尺寸完全相同,切换不会让位置跳动。
+/// Which icon to show. The voice icon with the yellow dot has exactly the size of the normal one, so switching never moves anything.
 #[derive(PartialEq, Clone, Copy)]
 enum IconKind {
     Off,
@@ -76,7 +77,7 @@ struct Icons {
 }
 
 impl Icons {
-    /// 只在要显示的图标真的变了才换
+    /// Swap the icon only when the one to show has really changed.
     fn refresh(&mut self, tray: &tray_icon::TrayIcon) {
         let kind = if self.voice {
             IconKind::Voice
@@ -92,7 +93,7 @@ impl Icons {
         let _ = match kind {
             IconKind::On => tray.set_icon_templated(Some(self.on.clone())),
             IconKind::Off => tray.set_icon_templated(Some(self.off.clone())),
-            // 黄点是彩色的,不能用模板图标。按菜单栏此刻的深浅选白色或黑色机身
+            // The yellow dot is colored, so a template icon cannot be used. Pick a white or black body to match the menu bar right now.
             IconKind::Voice => tray.set_icon(Some(if menubar_is_dark(tray) {
                 self.voice_dark.clone()
             } else {
@@ -112,8 +113,8 @@ impl Icons {
     }
 }
 
-/// 菜单栏按钮此刻是不是深色外观,深色时图标应为白色。
-/// 必须问按钮本身,macOS 的菜单栏颜色会跟着壁纸变,和系统的深浅色设置不一定一致。
+/// Whether the menu bar button is dark right now, in which case the icon must be white.
+/// Ask the button itself: the menu bar color follows the wallpaper and need not match the system light or dark setting.
 fn menubar_is_dark(tray: &tray_icon::TrayIcon) -> bool {
     use objc2_app_kit::{
         NSAppearanceCustomization, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
@@ -125,7 +126,7 @@ fn menubar_is_dark(tray: &tray_icon::TrayIcon) -> bool {
     let Some(button) = item.button(mtm) else {
         return true;
     };
-    // SAFETY: 读取两个 AppKit 提供的外观名常量。
+    // SAFETY: reads two appearance name constants provided by AppKit.
     unsafe {
         let appearance = button.effectiveAppearance();
         let names = NSArray::from_slice(&[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]);
@@ -135,7 +136,7 @@ fn menubar_is_dark(tray: &tray_icon::TrayIcon) -> bool {
     }
 }
 
-/// 激活本应用,菜单栏应用默认不是前台应用
+/// Bring this app to the front. A menu bar app is not the frontmost app by default.
 #[allow(deprecated)]
 fn activate_app() {
     if let Some(mtm) = objc2::MainThreadMarker::new() {
@@ -143,7 +144,7 @@ fn activate_app() {
     }
 }
 
-/// macOS 标准的关于面板,图标、名称、版本号都取自 Info.plist
+/// The standard macOS About panel. Icon, name and version come from Info.plist.
 #[allow(deprecated)]
 fn show_about() {
     activate_app();
@@ -152,7 +153,7 @@ fn show_about() {
     }
 }
 
-/// 播放一个系统提示音,不等待播放结束
+/// Play a system sound without waiting for it to finish.
 fn play_sound(name: &str) {
     let path = format!("/System/Library/Sounds/{name}.aiff");
     if let Ok(mut child) = std::process::Command::new("afplay").arg(path).spawn() {
@@ -162,7 +163,7 @@ fn play_sound(name: &str) {
     }
 }
 
-/// 文字没变就不动它
+/// Leave the item alone when the text did not change.
 fn put(item: &MenuItem, text: impl AsRef<str>) {
     if item.text() != text.as_ref() {
         item.set_text(text.as_ref());
@@ -185,6 +186,32 @@ impl Line {
     }
 }
 
+/// Only the user can switch Accessibility on, so all we do is open the right pane.
+fn open_accessibility_settings() {
+    let _ = std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        .spawn();
+}
+
+/// Mark first-run setup finished the moment both steps are seen done.
+fn finish_setup(snap: &mut Snapshot, state: &mut crate::setup::Setup) {
+    if !state.completed && crate::setup::is_complete(snap.connected, snap.trusted) {
+        state.completed = true;
+        snap.setup_done = true;
+        crate::setup::save(state);
+    }
+}
+
+/// What the detail line says. An error from the keyboard session wins, because it is the newest
+/// and needs a look. Then a config problem, which stays until the config is fixed. Otherwise the
+/// normal line, such as the battery.
+fn detail_text(normal: &Line, config_problem: &Option<String>, error: &Option<String>) -> String {
+    error
+        .clone()
+        .or_else(|| config_problem.clone())
+        .unwrap_or_else(|| normal.text())
+}
+
 /// The tray menu items and what they currently show.
 struct MenuUi {
     status_item: MenuItem,
@@ -195,7 +222,12 @@ struct MenuUi {
     about_item: MenuItem,
     quit_item: MenuItem,
     status_line: Line,
+    /// What the detail line normally says: battery, search hint.
     detail_line: Line,
+    /// A problem in the config file, shown instead of `detail_line` until a good reload clears it.
+    config_problem: Option<String>,
+    /// The latest error, shown first. The next status update replaces it.
+    error: Option<String>,
 }
 
 impl MenuUi {
@@ -215,6 +247,8 @@ impl MenuUi {
             quit_item: MenuItem::new(Msg::Quit.text(), true, q),
             status_line: Line::Msg(Msg::Starting),
             detail_line: Line::Raw(String::new()),
+            config_problem: None,
+            error: None,
         }
     }
 
@@ -223,15 +257,34 @@ impl MenuUi {
         put(&self.status_item, self.status_line.text());
     }
 
+    /// A new normal line. Whatever error was showing belongs to the past.
     fn set_detail(&mut self, l: Line) {
         self.detail_line = l;
-        put(&self.detail_item, self.detail_line.text());
+        self.error = None;
+        self.show_detail();
+    }
+
+    fn set_config_problem(&mut self, problem: Option<String>) {
+        self.config_problem = problem;
+        self.show_detail();
+    }
+
+    fn set_error(&mut self, message: String) {
+        self.error = Some(message);
+        self.show_detail();
+    }
+
+    fn show_detail(&self) {
+        put(
+            &self.detail_item,
+            detail_text(&self.detail_line, &self.config_problem, &self.error),
+        );
     }
 
     /// Redraw every line in the current language.
     fn relocalize(&self, released: bool) {
         put(&self.status_item, self.status_line.text());
-        put(&self.detail_item, self.detail_line.text());
+        self.show_detail();
         put(&self.trust_item, Msg::AccessibilityNeeded.text());
         put(
             &self.release_item,
@@ -248,7 +301,7 @@ impl MenuUi {
     }
 }
 
-/// 设置窗口打开时应用会切成普通应用,这时需要一个标准的主菜单,复制粘贴、关闭窗口等快捷键才有效
+/// While the settings window is open the app becomes a regular app, and it needs a standard main menu for copy, paste, close window and the like to work.
 /// Handles to the main menu items whose titles we own, so they can follow the language.
 struct MainMenu {
     app: Submenu,
@@ -322,7 +375,7 @@ fn install_main_menu() -> Option<MainMenu> {
     Some(handles)
 }
 
-/// 解码内置的 PNG 图标,由 scripts/make-icons.py 生成
+/// Decode a built-in PNG icon, generated by scripts/make-icons.py.
 fn load_icon(png_bytes: &[u8]) -> Icon {
     let mut reader = png::Decoder::new(Cursor::new(png_bytes))
         .read_info()
@@ -333,7 +386,7 @@ fn load_icon(png_bytes: &[u8]) -> Icon {
     Icon::from_rgba(buf, info.width, info.height).expect("invalid icon data")
 }
 
-pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
+pub fn run(start: impl FnOnce(Proxy), handlers: Handlers, first_run: crate::setup::Setup) -> ! {
     let mut event_loop = EventLoopBuilder::<UiEvent>::with_user_event().build();
     event_loop.set_activation_policy(ActivationPolicy::Accessory);
     let proxy = event_loop.create_proxy();
@@ -374,8 +427,8 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
         .build()
         .expect("failed to create the menu bar item");
 
-    // 点击状态栏图标时先把本应用激活再弹菜单。
-    // 菜单是在嵌套事件循环里显示的,应用不是前台时第一次点击弹出的菜单会被立刻收起。
+    // On a click on the status icon, activate this app before the menu opens.
+    // The menu is shown in a nested event loop, and when the app is not frontmost the menu opened by the first click is closed again at once.
     tray_icon::TrayIconEvent::set_event_handler(Some(|e: tray_icon::TrayIconEvent| {
         use tray_icon::{MouseButtonState, TrayIconEvent};
         if let TrayIconEvent::Click {
@@ -389,8 +442,15 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
 
     let main_menu = install_main_menu();
     start(proxy);
-    // 调试用:启动后直接打开设置窗口
+    // Debugging aid: open the settings window right after start.
     if std::env::args().any(|a| a == "--open-settings") {
+        let _ = window_proxy.send_event(UiEvent::Menu(mu.settings_item.id().clone()));
+    }
+    // The very first launch opens the settings window once, where the checklist is.
+    let mut setup_state = first_run;
+    if !setup_state.welcomed {
+        setup_state.welcomed = true;
+        crate::setup::save(&setup_state);
         let _ = window_proxy.send_event(UiEvent::Menu(mu.settings_item.id().clone()));
     }
 
@@ -406,6 +466,7 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
     let (mic_state, mic_installed) = crate::mic::initial_state();
     let mut snap = Snapshot {
         autostart: crate::autostart::enabled(),
+        setup_done: setup_state.completed,
         mic: Some(mic_state),
         mic_installed,
         ..Default::default()
@@ -416,7 +477,11 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
     event_loop.run(move |event, target, control_flow| {
         *control_flow = ControlFlow::Wait;
         let ev = match event {
-            Event::WindowEvent { event: WindowEvent::CloseRequested, window_id, .. } => {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                window_id,
+                ..
+            } => {
                 if settings.as_ref().is_some_and(|s| s.id() == window_id) {
                     settings = None;
                     target.set_activation_policy_at_runtime(ActivationPolicy::Accessory);
@@ -482,7 +547,12 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
                         snap.released = on;
                         put(
                             &mu.release_item,
-                            if on { Msg::ConnectKeyboard } else { Msg::DisconnectKeyboard }.text(),
+                            if on {
+                                Msg::ConnectKeyboard
+                            } else {
+                                Msg::DisconnectKeyboard
+                            }
+                            .text(),
                         );
                         if on {
                             mu.set_status(Msg::Disconnected);
@@ -503,7 +573,7 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
                         }
                     }
                     Status::Voice(down) => {
-                        // 按住时图标右上角亮黄点并有一声轻提示。图标尺寸不变,位置不会跳
+                        // While held: a yellow dot at the top right of the icon and a soft sound. The icon keeps its size, so nothing jumps.
                         icons.set_voice(down, &tray);
                         play_sound(if down { "Pop" } else { "Tink" });
                     }
@@ -511,20 +581,26 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
                         if let Some(w) = &settings {
                             w.post(&json!({ "t": "notice", "text": m }));
                         }
-                        mu.set_detail(Line::Raw(m));
+                        mu.set_error(m);
                     }
                 }
+                finish_setup(&mut snap, &mut setup_state);
                 if let Some(w) = settings.as_mut() {
                     w.push_state(&snap);
                 }
             }
-            UiEvent::Notice(m) => {
-                if let Some(w) = &settings {
-                    w.post(&json!({ "t": "notice", "text": m }));
+            UiEvent::ConfigProblem(problem) => {
+                if let (Some(w), Some(text)) = (&settings, &problem) {
+                    w.post(&json!({ "t": "notice", "text": text }));
                 }
-                mu.set_detail(Line::Raw(m));
+                mu.set_config_problem(problem);
             }
             UiEvent::Trusted(ok) => {
+                snap.trusted = Some(ok);
+                finish_setup(&mut snap, &mut setup_state);
+                if let Some(w) = settings.as_mut() {
+                    w.push_state(&snap);
+                }
                 if !ok && !trust_shown {
                     let _ = menu.insert(&mu.trust_item, TRUST_POS);
                     trust_shown = true;
@@ -535,6 +611,7 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
             }
             UiEvent::Menu(id) => {
                 if id == *mu.quit_item.id() {
+                    crate::logfile::drain();
                     std::process::exit(0);
                 } else if id == *mu.release_item.id() {
                     (handlers.set_released)(!snap.released);
@@ -544,21 +621,20 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
                     if let Some(w) = &settings {
                         w.focus();
                     } else {
-                        // 窗口打开期间变成普通应用,才有主菜单和 ⌘C ⌘V 这些快捷键
+                        // While the window is open the app becomes a regular app, which gives it a main menu and shortcuts like ⌘C and ⌘V.
                         target.set_activation_policy_at_runtime(ActivationPolicy::Regular);
                         match SettingsWindow::open(target, window_proxy.clone()) {
                             Ok(w) => settings = Some(w),
                             Err(e) => {
-                                target.set_activation_policy_at_runtime(ActivationPolicy::Accessory);
-                                mu.set_detail(Line::Raw(Msg::CannotOpenSettings(e.to_string()).text()));
+                                target
+                                    .set_activation_policy_at_runtime(ActivationPolicy::Accessory);
+                                mu.set_error(Msg::CannotOpenSettings(e.to_string()).text());
                             }
                         }
                     }
                     activate_app();
                 } else if id == *mu.trust_item.id() {
-                    let _ = std::process::Command::new("open")
-                        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-                        .spawn();
+                    open_accessibility_settings();
                 }
             }
             UiEvent::Settings(text) => {
@@ -577,7 +653,7 @@ pub fn run(start: impl FnOnce(Proxy), handlers: Handlers) -> ! {
     })
 }
 
-/// 处理设置窗口里网页发来的消息
+/// Handle a message from the web page in the settings window.
 fn handle_settings_message(
     text: &str,
     settings: &mut Option<SettingsWindow>,
@@ -622,12 +698,24 @@ fn handle_settings_message(
             w.push_state(snap);
         }
         "about" => show_about(),
-        // 只打开 Cargo.toml 里声明的仓库地址,不接受页面传来的任意网址
+        // Only the repository URL declared in Cargo.toml is opened, never an arbitrary URL from the page.
         "open_repo" => {
             let _ = std::process::Command::new("open")
                 .arg(env!("CARGO_PKG_REPOSITORY"))
                 .spawn();
         }
+        // Show the file in Finder so it can be dragged into a message. Nothing to show before the first write.
+        "open_log" => {
+            let path = crate::logfile::path();
+            let mut open = std::process::Command::new("open");
+            if path.exists() {
+                open.arg("-R").arg(path);
+            } else if let Some(dir) = path.parent() {
+                open.arg(dir);
+            }
+            let _ = open.spawn();
+        }
+        "open_accessibility" => open_accessibility_settings(),
         "open_config" => {
             let _ = std::process::Command::new("open")
                 .arg("-t")
@@ -642,6 +730,22 @@ fn handle_settings_message(
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn the_detail_line_shows_an_error_first_then_a_config_problem_then_the_normal_line() {
+        let battery = Line::Raw("Battery 82%".into());
+        let problem = Some("2 invalid entries".to_string());
+        let error = Some("Could not open settings".to_string());
+        assert_eq!(detail_text(&battery, &None, &None), "Battery 82%");
+        assert_eq!(detail_text(&battery, &problem, &None), "2 invalid entries");
+        // The error must stay visible while a config problem is pending.
+        assert_eq!(
+            detail_text(&battery, &problem, &error),
+            "Could not open settings"
+        );
+        // A good reload clears the problem and the battery comes back.
+        assert_eq!(detail_text(&battery, &None, &None), "Battery 82%");
+    }
 
     #[test]
     fn the_search_hint_appears_only_after_fifteen_seconds() {

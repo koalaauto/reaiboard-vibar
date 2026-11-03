@@ -1,4 +1,5 @@
-//! 后台逻辑:蓝牙连接 + 事件分发 + 设备设置。不依赖 UI,通过回调上报状态。
+//! Background logic for the Bluetooth connection, event dispatch and device settings.
+//! Independent of the UI, it reports status through a callback.
 
 use std::collections::HashMap;
 use std::sync::mpsc::Sender;
@@ -15,7 +16,7 @@ use crate::config;
 use crate::i18n::Msg;
 use crate::mic::{self, InstallOutcome, MicCtl, MicState};
 
-/// 拨杆某一档解析好的绑定
+/// The resolved bindings for one lever position
 #[derive(Default, Clone)]
 pub struct ModeMap {
     pub bindings: HashMap<String, Resolved>,
@@ -23,7 +24,7 @@ pub struct ModeMap {
     pub on_leave: Option<Resolved>,
 }
 
-/// 解析好的全部绑定:默认层加上拨杆三档各自的覆盖层
+/// All resolved bindings. The default layer plus an override layer for each lever position.
 #[derive(Default, Clone)]
 pub struct Keymap {
     pub default: HashMap<String, Resolved>,
@@ -32,7 +33,7 @@ pub struct Keymap {
 }
 
 impl Keymap {
-    /// 先看当前档位有没有覆盖,没有就用默认层
+    /// Looks in the current position's overrides first, then falls back to the default layer
     pub fn lookup(&self, mode: Option<&str>, name: &str) -> Option<&Resolved> {
         mode.and_then(|m| self.modes.get(m))
             .and_then(|m| m.bindings.get(name))
@@ -48,7 +49,7 @@ pub type Bindings = Arc<RwLock<Keymap>>;
 
 #[derive(Debug, Clone)]
 pub enum Status {
-    /// 在扫描,键盘可能在休眠
+    /// Scanning, the keyboard may be asleep
     Searching,
     Connecting,
     Connected,
@@ -56,48 +57,52 @@ pub enum Status {
         firmware: String,
         battery: u8,
     },
-    /// 键盘当前生效的休眠设置(秒)
+    /// The sleep setting currently in effect on the keyboard, in seconds
     Sleep {
         connected: u16,
         disconnected: u16,
     },
     Disconnected,
-    /// 麦克风功能的状态;`installed` 表示系统里是否装有驱动
+    /// Microphone feature state. `installed` tells whether the driver is on the system
     Mic {
         state: MicState,
         installed: bool,
     },
-    /// AI 语音键按下 / 松开(给界面做反馈)
+    /// AI voice key pressed or released, for UI feedback
     Voice(bool),
-    /// 某个输入被按下或松开,设置窗口用它实时高亮
+    /// An input was pressed or released, used by the settings window for live highlighting
     Input {
         name: &'static str,
         pressed: bool,
     },
-    /// 拨杆当前所在的档位 chat yolo plan
+    /// Current lever position, one of chat, yolo or plan
     Mode(String),
-    /// 键盘是否已被主动释放(true = 已断开且不再自动重连,别的电脑可以连)
+    /// Whether the keyboard was released on purpose. True means disconnected with no automatic
+    /// reconnect, so another computer can connect.
     Released(bool),
     Error(String),
 }
 
-/// 界面发给后台的指令
+/// Commands the UI sends to the background task
 #[derive(Debug, Clone)]
 pub enum Command {
-    /// 修改休眠超时(秒);None 表示保持不变。会写入键盘并持久化。
+    /// Changes the sleep timeout in seconds, None keeps a value unchanged. The change is written to
+    /// the keyboard and persists there.
     SetSleep {
         connected: Option<u16>,
         disconnected: Option<u16>,
     },
-    /// 启用 / 关闭麦克风。首次启用会先征得同意并安装驱动。
+    /// Turns the microphone on or off. First enable asks for consent, then installs the driver.
     SetMic(bool),
-    /// 移除麦克风驱动(需要管理员密码)
+    /// Removes the microphone driver, needs the administrator password
     RemoveMicDriver,
-    /// 释放键盘 / 重新连接。释放后不再自动重连,让别的电脑能连上
+    /// Releases the keyboard or reconnects to it. A released keyboard is not reconnected
+    /// automatically, so that another computer can connect.
     SetReleased(bool),
 }
 
-/// 读配置并解析成绑定表。返回 配置、生效的绑定、无效项说明
+/// Reads the config and resolves it into the binding table. Returns the config, the effective
+/// bindings and a message for each invalid entry.
 pub fn load_bindings() -> anyhow::Result<(config::Config, Keymap, Vec<String>)> {
     let cfg = config::load()?;
     Ok(resolve_all(cfg))
@@ -182,11 +187,13 @@ pub async fn run(
     status: Arc<dyn Fn(Status) + Send + Sync>,
     mut commands: UnboundedReceiver<Command>,
 ) -> anyhow::Result<()> {
-    // 按下时选中的绑定要记住,松开时用同一个,即使中途拨杆换了档也不会卡住按键
+    // The binding chosen at press time is remembered and the same one is used on release, so a
+    // lever move in between cannot leave a key stuck.
     let mut held: HashMap<String, Resolved> = HashMap::new();
 
     let device = Arc::new(BoardDevice::open(BoardConfig::default())?);
-    // 虚拟麦克风的发送端必须在 start() 前挂上;驱动没装时发送会静默失败,不影响其他功能
+    // The virtual microphone sink must be attached before start(). If the driver is not installed,
+    // sending fails silently and does not affect anything else.
     let meter = Arc::new(mic::Meter::default());
     match VirtualMic::start() {
         Ok(sink) => device.set_pcm_sink(Arc::new(mic::MeteredSink::new(sink, meter.clone()))),
@@ -194,17 +201,29 @@ pub async fn run(
     }
     device.start().await?;
 
-    // 找板子:配置里指定了就直接连;否则一直扫到出现为止(键盘休眠时不广播,按键唤醒后才出现)
+    // Find the board. Connect straight to the one named in the config, otherwise scan until one
+    // appears. A sleeping keyboard does not advertise until a key press wakes it.
     let target = match device_name {
         Some(n) => n,
-        None => loop {
-            status(Status::Searching);
-            println!("Scanning for REAI_VB_ devices... (press a key if the keyboard is asleep)");
-            let found = device.scan_ble_devices(Duration::from_secs(6)).await?;
-            if let Some(d) = found.first() {
-                break d.name.clone();
+        None => {
+            let mut until_next_note = 0u32;
+            loop {
+                status(Status::Searching);
+                // A sleeping keyboard means thousands of scans. Say so at the start and every ten
+                // minutes, otherwise the log fills up with this one line.
+                if until_next_note == 0 {
+                    println!(
+                        "Scanning for REAI_VB_ devices... (press a key if the keyboard is asleep)"
+                    );
+                    until_next_note = 100;
+                }
+                until_next_note -= 1;
+                let found = device.scan_ble_devices(Duration::from_secs(6)).await?;
+                if let Some(d) = found.first() {
+                    break d.name.clone();
+                }
             }
-        },
+        }
     };
     println!("Connecting to {target} ...");
     status(Status::Connecting);
@@ -240,7 +259,7 @@ pub async fn run(
             }
             cmd = commands.recv() => {
                 let Some(cmd) = cmd else { continue };
-                // 麦克风相关指令不需要键盘在线
+                // Microphone commands do not need the keyboard to be online
                 match &cmd {
                     Command::SetMic(true) => {
                         println!("[mic] enable requested, driver installed: {}", mic::is_installed());
@@ -249,7 +268,8 @@ pub async fn run(
                         } else if !mic_is_busy(&mic) {
                             mic.set_installing(true);
                             let tx = install_tx.clone();
-                            // 安装要等用户输入管理员密码,放到阻塞线程里,不卡住按键处理
+                            // Installing waits for the administrator password, so
+                            // it runs on a blocking thread and key handling is not stalled
                             tokio::task::spawn_blocking(move || {
                                 let _ = tx.send(mic::install_with_consent());
                             });
@@ -310,11 +330,13 @@ pub async fn run(
                         mic.set_connected(c.connected);
                         emit_mic(&mut mic, &*status);
                         if released {
-                            // 主动释放后的断开事件:保持"已释放"显示,不要被覆盖成"已断开"
+                            // The disconnect after a deliberate release. Keep showing
+                            // "released" instead of overwriting it with "disconnected"
                             status(Status::Released(true));
                         } else if c.connected {
                             status(Status::Connected);
-                            // 连接建立后读一次当前休眠设置(只读),等 SDK 自己的握手命令先跑完
+                            // Once connected, read the current sleep setting (read only),
+                            // after the SDK has finished its own handshake commands
                             let (device, status) = (device.clone(), status.clone());
                             tokio::spawn(async move {
                                 tokio::time::sleep(Duration::from_millis(1500)).await;
@@ -368,7 +390,8 @@ pub async fn run(
                     }
                     BoardEvent::ModeChange(m) => {
                         let mode = m.mode.to_string().to_lowercase();
-                        // 连接后的第一条是初始状态,不触发;之后只在真正变化时触发
+                        // The first event after connecting is the initial state and does not
+                        // trigger anything. After that, only a real change triggers.
                         if last_mode.as_deref().is_some_and(|prev| prev != mode) {
                             println!("[lever] {mode}");
                             let km = bindings.read().unwrap();
@@ -396,7 +419,7 @@ pub async fn run(
     Ok(())
 }
 
-/// 状态有变化才上报,避免每 500ms 刷一次界面
+/// Reports only when the state changed, to avoid refreshing the UI every 500 ms
 fn emit_mic(mic: &mut MicCtl, status: &(dyn Fn(Status) + Send + Sync)) {
     if let Some((state, installed)) = mic.take_change() {
         status(Status::Mic { state, installed });
@@ -417,7 +440,8 @@ async fn handle_command(
             connected,
             disconnected,
         } => {
-            // 先读当前值,只改被指定的那一项;值没变就不写(设置会持久化到设备)
+            // Read the current values first and change only the requested one.
+            // Skip the write if the value is unchanged, since settings persist on the device.
             let cur = match device.get_sleep_timeout().await {
                 Ok(t) => t,
                 Err(e) => return status(Status::Error(Msg::SleepReadFailed(e.to_string()).text())),
@@ -447,7 +471,7 @@ async fn handle_command(
                 Err(e) => status(Status::Error(Msg::SleepSetFailed(e.to_string()).text())),
             }
         }
-        // 麦克风指令已在主循环里处理
+        // Microphone commands are already handled in the main loop
         Command::SetMic(_) | Command::RemoveMicDriver | Command::SetReleased(_) => {}
     }
 }

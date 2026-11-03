@@ -16,6 +16,8 @@ src/
   mic.rs              virtual microphone: driver install, state machine, on-demand streaming
   coreaudio.rs        asks CoreAudio whether the virtual mic is being recorded from
   autostart.rs        launch-at-login via a user LaunchAgent
+  setup.rs            first-run state (setup.toml): welcome window once, checklist until accessibility and the keyboard are both done
+  logfile.rs          captures stdout and stderr into ~/Library/Logs/Vibar/vibar.log when the app has no terminal
   settings.rs         settings window (wry web view), host <-> page messages, config saving
   ui.rs               menu bar item, icons, main menu, tao event loop
 ui/settings.html      the whole settings page: HTML, CSS and JS in one file, no visible text of its own
@@ -54,7 +56,7 @@ Three message types carry everything:
 
 - **`daemon::Status`**: daemon to UI. Facts about the world: searching, connected, battery, mode, microphone state, an input was pressed. Add a variant when the UI needs to know something new.
 - **`daemon::Command`**: UI to daemon. Requests: set the sleep time, enable the microphone, release the keyboard.
-- **`settings` messages**: JSON objects `{ "t": "<type>", ... }` between the page and the host. The page sends `load`, `save`, `sleep`, `release`, `mic`, `mic_remove`, `autostart`, `open_config`, `about`, `open_repo`. The host sends `config`, `lang`, `state`, `mode`, `input`, `saved`, `notice`.
+- **`settings` messages**: JSON objects `{ "t": "<type>", ... }` between the page and the host. The page sends `load`, `save`, `sleep`, `release`, `mic`, `mic_remove`, `autostart`, `open_config`, `open_log`, `open_accessibility`, `about`, `open_repo`. The host sends `config`, `lang`, `state`, `mode`, `input`, `saved`, `notice`.
 
 ## Key handling
 
@@ -102,5 +104,6 @@ Two languages today, English and Chinese. The user's choice is `language` in the
 - Flags: `--headless`, `--dry-run`, `--secs N`, `--probe-audio`, `--demo-icons`, `--open-settings`, `--set-sleep-connected <s>`, `--set-sleep-disconnected <s>`.
 - `VIBAR_CONFIG=/path/to/config.toml` makes Vibar use another config file (the single-instance lock file goes next to it).
 - Environment variables for the settings window: `VIBAR_PAGE` (`keys`, `board`, `mic`, `general`), `VIBAR_LAYER`, `VIBAR_SEL`, `VIBAR_THEME` (`light` or `dark`). Together with `--open-settings` they let you screenshot any state without clicking.
-- Launching through `open` loses stdout. Use `open -n --stdout /tmp/vibar.out --stderr /tmp/vibar.err build/Vibar.app`.
+- Logging is plain `println!` and `eprintln!` in our code. The vendor SDK logs through the `log` crate, shown by `env_logger` at level `warn` unless `RUST_LOG` says otherwise, and lands in the same place. `logfile.rs` takes over both streams only when both point to `/dev/null` (Finder, launchd) or `VIBAR_LOG=/path/to/file` is set, stamps each line and keeps two files of at most 1 MB (`vibar.log`, `vibar.log.1`). It opens the file again if someone deletes it while the app runs, and the output of shell bindings is never sent to it. From a terminal, or with `open --stderr file`, the output stays where the caller sent it.
+- Launching through `open` loses stdout unless you pass files. Use `open -n --stdout /tmp/vibar.out --stderr /tmp/vibar.err build/Vibar.app`, or `tail -f ~/Library/Logs/Vibar/vibar.log` after a plain `open`.
 - A bare binary started from a terminal or an IDE is killed by macOS when it touches Bluetooth, because the responsible process lacks the usage description. Always test through the `.app` bundle.

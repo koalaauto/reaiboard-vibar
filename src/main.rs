@@ -1,13 +1,13 @@
-//! Vibar:ReAI Vibe Board 的精简 macOS 客户端。
-//! 蓝牙直连键盘,把旋钮 / 按键 / 拨杆映射成系统快捷键,菜单栏常驻。
-//! 不依赖官方 App。只有在你主动修改「休眠时间」时才会向键盘写入设置,其余全部只读。
+//! Vibar: a small macOS client for the ReAI Vibe Board keyboard.
+//! It connects over Bluetooth, maps the knob, keys and lever to system shortcuts and lives in the menu bar.
+//! It does not need the vendor app. The only thing it ever writes to the keyboard is the sleep time, on request.
 //!
-//! 用法:vibar [--headless] [--dry-run] [--secs N]
-//!   --headless 不显示菜单栏图标,在终端里跑(调试用)
-//!   --dry-run  只打印将要执行的动作,不真的按键
-//!   --secs N   仅 --headless:运行 N 秒后退出
-//!   --set-sleep-connected <秒>     一次性写入「已连接时休眠」后退出(隐含 --headless)
-//!   --set-sleep-disconnected <秒>  一次性写入「断开后休眠」后退出(隐含 --headless)
+//! Usage: vibar [--headless] [--dry-run] [--secs N]
+//!   --headless  no menu bar icon, run in the terminal (for debugging)
+//!   --dry-run   print the actions instead of pressing keys
+//!   --secs N    with --headless only: exit after N seconds
+//!   --set-sleep-connected <seconds>     write the sleep time while connected, then exit (implies --headless)
+//!   --set-sleep-disconnected <seconds>  write the sleep time after disconnecting, then exit (implies --headless)
 
 mod actions;
 mod autostart;
@@ -15,8 +15,10 @@ mod config;
 mod coreaudio;
 mod daemon;
 mod i18n;
+mod logfile;
 mod mic;
 mod settings;
+mod setup;
 mod ui;
 
 use std::sync::{Arc, Mutex, RwLock};
@@ -26,11 +28,26 @@ use daemon::{Bindings, Command, Status};
 use i18n::Msg;
 use ui::{Handlers, UiEvent};
 
-fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
-        .format_timestamp_millis()
-        .init();
+fn main() {
+    // First of all, so that nothing printed later is lost when the app is started from Finder.
+    let to_file = logfile::init();
+    let mut logger =
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"));
+    if to_file {
+        logger.format_timestamp(None); // the log file stamps every line itself
+    } else {
+        logger.format_timestamp_millis();
+    }
+    logger.init();
 
+    if let Err(e) = run() {
+        eprintln!("Error: {e:#}");
+        logfile::drain();
+        std::process::exit(1);
+    }
+}
+
+fn run() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let dry_run = args.iter().any(|a| a == "--dry-run");
     let arg_u16 = |flag: &str| {
@@ -50,7 +67,7 @@ fn main() -> anyhow::Result<()> {
         .and_then(|i| args.get(i + 1))
         .and_then(|s| s.parse::<u64>().ok());
 
-    // 诊断:只读地查询虚拟麦克风在 CoreAudio 里的状态,不连键盘、不占单实例锁
+    // Diagnostics: ask CoreAudio about the virtual microphone, read only. No keyboard, no single-instance lock.
     if args.iter().any(|a| a == "--probe-audio") {
         let secs = secs.unwrap_or(5);
         for i in 0..secs {
@@ -62,10 +79,21 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    config::migrate_legacy();
+    let migrated = config::migrate_legacy();
+    // Before anything creates the default config: an existing file means this is not a first run.
+    let first_run_state = setup::at_startup(config::config_path().exists());
     // Language first, so that everything reported below is in the right language.
     i18n::set(i18n::resolve(config::peek_language().as_deref()));
     let _lock = single_instance()?;
+    // Only now, so that a second copy of the app, which exits at once, leaves the log alone.
+    logfile::announce();
+    if let Some((old, new)) = migrated {
+        println!(
+            "Migrated the old config from {} to {}",
+            old.display(),
+            new.display()
+        );
+    }
 
     // A broken config at startup must not stop the app: fall back to the built-in defaults and say so in the menu.
     let (cfg, map, startup_notice) = match daemon::load_bindings() {
@@ -98,7 +126,7 @@ fn main() -> anyhow::Result<()> {
     if headless {
         let exec = actions::spawn_executor(dry_run, |_| {})?;
         let (cmd_tx, cmd_rx) = tokio::sync::mpsc::unbounded_channel();
-        // 一次性设置:连上后第一次读到当前值时下发修改,等设备回报生效值后退出
+        // One-shot setting: send the change when the current value is first read, exit once the device reports the new one.
         let sent = std::sync::atomic::AtomicBool::new(false);
         let status: Arc<dyn Fn(Status) + Send + Sync> = Arc::new(move |s| {
             if let Status::Error(m) = &s {
@@ -120,6 +148,7 @@ fn main() -> anyhow::Result<()> {
                     });
                 } else {
                     println!("Effective: connected {connected}s, disconnected {disconnected}s");
+                    logfile::drain();
                     std::process::exit(0);
                 }
             }
@@ -165,7 +194,10 @@ fn main() -> anyhow::Result<()> {
             let proxy = Arc::new(Mutex::new(proxy));
             watch_config(watch_bindings, proxy.clone());
             if let Some(n) = startup_notice {
-                let _ = proxy.lock().unwrap().send_event(UiEvent::Notice(n));
+                let _ = proxy
+                    .lock()
+                    .unwrap()
+                    .send_event(UiEvent::ConfigProblem(Some(n)));
             }
             let p = proxy.clone();
             let exec = actions::spawn_executor(dry_run, move |ok| {
@@ -176,7 +208,7 @@ fn main() -> anyhow::Result<()> {
             let status: Arc<dyn Fn(Status) + Send + Sync> = Arc::new(move |s| {
                 let _ = proxy.lock().unwrap().send_event(UiEvent::Status(s));
             });
-            // 界面演示:不连键盘,循环切换图标状态,用于肉眼 / 截图检查各状态的渲染
+            // UI demo: no keyboard, cycle through the icon states so each one can be checked by eye or in a screenshot.
             if demo_icons {
                 std::thread::spawn(move || loop {
                     for (s, secs) in [
@@ -209,6 +241,7 @@ fn main() -> anyhow::Result<()> {
                 .expect("failed to start the daemon thread");
         },
         handlers,
+        first_run_state,
     )
 }
 
@@ -229,27 +262,34 @@ fn watch_config(bindings: Bindings, proxy: Arc<Mutex<ui::Proxy>>) {
             last = now;
             // Language first, so the notice below is in the new language.
             let language_changed = i18n::set(i18n::resolve(config::peek_language().as_deref()));
-            let msg = match daemon::load_bindings() {
+            // A reload that worked is not worth a word in the menu. Only a problem is reported, and
+            // the next good reload clears it.
+            let problem = match daemon::load_bindings() {
                 Ok((_, map, bad)) => {
-                    let n = map.count();
+                    println!(
+                        "[config] reloaded, {} bindings, {} invalid",
+                        map.count(),
+                        bad.len()
+                    );
                     *bindings.write().unwrap() = map;
-                    match bad.first() {
-                        None => Msg::ConfigUpdated(n).text(),
-                        Some(first) => Msg::ConfigUpdatedWithInvalid {
+                    bad.first().map(|first| {
+                        Msg::ConfigUpdatedWithInvalid {
                             count: bad.len(),
                             first: first.clone(),
                         }
-                        .text(),
-                    }
+                        .text()
+                    })
                 }
-                Err(e) => Msg::KeepingPrevious(e.to_string()).text(),
+                Err(e) => {
+                    println!("[config] {e:#}");
+                    Some(Msg::KeepingPrevious(e.to_string()).text())
+                }
             };
-            println!("[config] {msg}");
             let proxy = proxy.lock().unwrap();
             if language_changed {
                 let _ = proxy.send_event(UiEvent::LanguageChanged);
             }
-            let _ = proxy.send_event(UiEvent::Notice(msg));
+            let _ = proxy.send_event(UiEvent::ConfigProblem(problem));
         })
         .expect("failed to start the config watcher thread");
 }

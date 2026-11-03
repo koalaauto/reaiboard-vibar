@@ -102,7 +102,6 @@ pub enum Msg {
     SleepReadFailed(String),
     SleepSetFailed(String),
     // Config notices
-    ConfigUpdated(usize),
     ConfigUpdatedWithInvalid {
         count: usize,
         first: String,
@@ -178,7 +177,6 @@ impl Msg {
             MicRemoveFailed(e) => format!("Could not remove the microphone driver, {e}"),
             SleepReadFailed(e) => format!("Could not read the sleep setting, {e}"),
             SleepSetFailed(e) => format!("Could not change the sleep setting, {e}"),
-            ConfigUpdated(n) => format!("Config updated, {n} entries"),
             ConfigUpdatedWithInvalid { count, first } => {
                 format!("Config updated, but {count} invalid, {first}")
             }
@@ -235,7 +233,6 @@ impl Msg {
             MicRemoveFailed(e) => format!("卸载麦克风驱动失败,{e}"),
             SleepReadFailed(e) => format!("读取休眠设置失败,{e}"),
             SleepSetFailed(e) => format!("修改休眠设置失败,{e}"),
-            ConfigUpdated(n) => format!("配置已更新,共 {n} 项"),
             ConfigUpdatedWithInvalid { count, first } => {
                 format!("已更新,但 {count} 项无效,{first}")
             }
@@ -300,7 +297,6 @@ mod tests {
             MicRemoveFailed(s()),
             SleepReadFailed(s()),
             SleepSetFailed(s()),
-            ConfigUpdated(3),
             ConfigUpdatedWithInvalid {
                 count: 2,
                 first: s(),

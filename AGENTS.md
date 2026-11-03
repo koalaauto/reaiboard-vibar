@@ -21,7 +21,7 @@ There is no GitHub Actions workflow on purpose. `scripts/ci.sh` is the CI. Run i
 
 ## Map
 
-`src/daemon.rs` Bluetooth session and key handling. `src/config.rs` config model. `src/actions.rs` key simulation. `src/mic.rs` and `src/coreaudio.rs` microphone. `src/ui.rs` menu bar. `src/settings.rs`, `ui/settings.html` and `ui/strings.json` settings window. `src/i18n.rs` languages and Rust-side messages. Details and extension recipes are in `docs/architecture.md`.
+`src/daemon.rs` Bluetooth session and key handling. `src/config.rs` config model. `src/actions.rs` key simulation. `src/mic.rs` and `src/coreaudio.rs` microphone. `src/logfile.rs` log file. `src/setup.rs` first-run state. `src/ui.rs` menu bar. `src/settings.rs`, `ui/settings.html` and `ui/strings.json` settings window. `src/i18n.rs` languages and Rust-side messages. Details and extension recipes are in `docs/architecture.md`.
 
 ## Invariants. Do not break these
 
@@ -34,11 +34,13 @@ There is no GitHub Actions workflow on purpose. `scripts/ci.sh` is the CI. Run i
 7. **The repository URL lives only in `Cargo.toml`.** Rust reads `env!("CARGO_PKG_REPOSITORY")`, the page and bundle script read it from there.
 8. **The sink for microphone audio is installed before the SDK `start()`.**
 9. **The board drawing in the settings page mirrors the real keyboard** (arrangement, capital keycap legends, microphone symbol on the voice key, lever order YOLO, CHAT, PLAN). Check `docs/hardware.md` before changing it.
+10. **The log never holds typed text or secrets.** Users send `vibar.log` with bug reports. Log input names, connection events and error messages only, never the clipboard, the contents of a text field or the whole config.
 
 ## Working safely on this machine
 
 - **Bluetooth, Accessibility and administrator prompts need a human.** Do not try to click them away. Say what is waiting and stop.
 - **Test through the `.app`, not the bare binary.** A bare binary started from your shell is killed by macOS on first Bluetooth use. `scripts/devapp.sh <binary> <name> [args]` wraps one into a throwaway app.
+- **A throwaway app leaves a row in the user's System Settings.** It gets its own Bluetooth and Accessibility entry, with a made-up name and no icon, and `tccutil` cannot remove it once the app is gone. To look at the UI, run a copy of the real `Vibar.app` instead: same bundle id and signature, so no new row. Copy it outside the repo, put the new binary in, sign it with the same identity, and start it with `open -n --env VIBAR_CONFIG=… --env VIBAR_LOG=… --env VIBAR_PAGE=general copy/Vibar.app --args --open-settings`. For page-only checks, load `ui/settings.html` in a browser with a mocked `window.ipc`.
 - **Screenshots: capture the window by id** (`screencapture -l <id>`), never a screen region. A region captures whatever is in front, including the user's private windows. Find the id with `CGWindowListCopyWindowInfo`; `docs/architecture.md` lists the `VIBAR_*` environment variables and `--open-settings` that put the settings window into any state. Delete screenshots when done.
 - **Never run `rm` with an unguarded variable.** Use `"${VAR:?}"/path` or a literal path.
 - Launching via `open` loses stdout. Use `open -n --stdout FILE --stderr FILE build/Vibar.app`.

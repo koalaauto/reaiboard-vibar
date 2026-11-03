@@ -1,9 +1,10 @@
-//! 配置:~/.config/vibar/config.toml。设置窗口读写它,首次运行自动写入默认配置。
+//! Config at ~/.config/vibar/config.toml. The settings window reads and writes it, and the first
+//! run writes the default config.
 //!
-//! 结构:
-//!   [bindings]            默认层,所有拨杆档位都生效
-//!   [modes.plan]          拨杆在 PLAN 档时,覆盖默认层里的某几个键,没写的沿用默认
-//!   on_enter / on_leave   进入、离开某一档时触发的动作
+//! Structure:
+//!   [bindings]            default layer, applies in every lever position
+//!   [modes.plan]          lever at PLAN, overrides some default keys and the rest stay as default
+//!   on_enter / on_leave   actions triggered when entering or leaving a lever position
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -14,7 +15,7 @@ use crate::i18n::Msg;
 
 pub const DEFAULT_CONFIG: &str = include_str!("../default-config.toml");
 
-/// 键盘上全部可配置的输入,界面和配置文件都用这些名字
+/// Every configurable input on the keyboard. The UI and the config file use these names.
 pub const INPUTS: &[&str] = &[
     "knob_ccw",
     "knob_cw",
@@ -27,10 +28,11 @@ pub const INPUTS: &[&str] = &[
     "enter",
 ];
 
-/// 拨杆的三档
+/// The three lever positions
 pub const MODES: &[&str] = &["chat", "yolo", "plan"];
 
-/// 一个绑定。字符串简写 = 点击快捷键;表写法可选 hold / media / shell。
+/// A binding. A plain string is shorthand for a click shortcut, the table form can also set
+/// hold, media or shell.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Binding {
@@ -40,43 +42,44 @@ pub enum Binding {
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 pub struct BindingDetail {
-    /// 点击一次的快捷键,如 "cmd+shift+4"
+    /// Shortcut that is clicked once, such as "cmd+shift+4"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
-    /// 按下时按住、松开时释放,适合按住说话
+    /// Held down on press and released on release, suited to push-to-talk
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hold: Option<String>,
-    /// 媒体键 volume_up volume_down mute play_pause
+    /// Media key, one of volume_up, volume_down, mute, play_pause
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media: Option<String>,
-    /// 执行 shell 命令
+    /// Runs a shell command
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shell: Option<String>,
-    /// 什么也不做。在拨杆某一档里用来"取消"默认层的绑定
+    /// Does nothing. Used in a lever position to "cancel" a binding of the default layer
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub none: Option<bool>,
 }
 
-/// 拨杆某一档的设置
+/// Settings for one lever position
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 pub struct ModeConfig {
-    /// 在这一档里覆盖默认层的键
+    /// Keys that override the default layer in this position
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub bindings: BTreeMap<String, Binding>,
-    /// 拨到这一档时触发
+    /// Triggered when the lever moves into this position
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_enter: Option<Binding>,
-    /// 离开这一档时触发
+    /// Triggered when the lever moves out of this position
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_leave: Option<Binding>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 pub struct Config {
-    /// 指定要连接的蓝牙名,不填则连扫描到的第一块 REAI_VB_
+    /// Bluetooth name to connect to. If empty, uses the first REAI_VB_ device found by scanning.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
-    /// 旋钮方向反了就打开,界面里的「校准旋钮」会帮你设置
+    /// Turn on if the knob turns the wrong way. The Calibrate button in the settings window sets it
+    /// for you.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub knob_swap: bool,
     /// Interface language. Absent or "auto" follows the system, otherwise "en" or "zh-CN".
@@ -89,8 +92,9 @@ pub struct Config {
 }
 
 impl Config {
-    /// 把旧版配置的写法迁移到当前结构:
-    /// knob_a / knob_b 改名为 knob_ccw / knob_cw,mode_xxx 变成该档的 on_enter。
+    /// Migrates the old config layout to the current structure.
+    /// knob_a and knob_b are renamed to knob_ccw and knob_cw, and mode_xxx becomes the on_enter of
+    /// that position.
     pub fn normalize(&mut self) {
         for (old, new) in [("knob_a", "knob_ccw"), ("knob_b", "knob_cw")] {
             if let Some(b) = self.bindings.remove(old) {
@@ -106,7 +110,8 @@ impl Config {
     }
 }
 
-/// 配置文件位置。环境变量 VIBAR_CONFIG 可以改指向别处,方便测试时不碰真实配置。
+/// Location of the config file. The VIBAR_CONFIG environment variable can point elsewhere, so
+/// tests do not touch the real config.
 pub fn config_path() -> PathBuf {
     path_from(
         std::env::var_os("VIBAR_CONFIG"),
@@ -121,24 +126,23 @@ fn path_from(override_path: Option<std::ffi::OsString>, home: &str) -> PathBuf {
     }
 }
 
-/// 旧版本叫 reai-bar。首次运行时把旧配置目录里的文件搬过来,并清掉旧的开机启动项。
-pub fn migrate_legacy() {
+/// The old version was called reai-bar. On first run, copies the files from the old config
+/// directory over and removes the old login item. Returns the two folders when it copied, so the
+/// caller can log it once the log is ready.
+pub fn migrate_legacy() -> Option<(PathBuf, PathBuf)> {
     let home = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into()));
     let (old, new) = (home.join(".config/reai-bar"), home.join(".config/vibar"));
-    if old.exists() && !new.exists() && std::fs::create_dir_all(&new).is_ok() {
+    let migrated = old.exists() && !new.exists() && std::fs::create_dir_all(&new).is_ok();
+    if migrated {
         for f in ["config.toml", "state.toml"] {
             let _ = std::fs::copy(old.join(f), new.join(f));
         }
-        println!(
-            "Migrated the old config from {} to {}",
-            old.display(),
-            new.display()
-        );
     }
     let agent = home.join("Library/LaunchAgents/dev.koala.reai-bar.plist");
     if agent.exists() {
         let _ = std::fs::remove_file(agent);
     }
+    migrated.then_some((old, new))
 }
 
 pub fn load() -> anyhow::Result<Config> {
@@ -152,10 +156,15 @@ pub fn load() -> anyhow::Result<Config> {
     }
     let text = std::fs::read_to_string(&path)?;
     parse(&text).map_err(|e| {
-        println!("[config] {} {e}", path.display()); // full reason goes to the log
         let line = e
             .span()
             .map(|s| text[..s.start.min(text.len())].matches('\n').count() + 1);
+        // The parser's message quotes the offending source line, which may hold a secret such as a
+        // token in a shell command, and the log gets attached to bug reports. Only the position goes in.
+        match line {
+            Some(l) => println!("[config] syntax error in {} on line {l}", path.display()),
+            None => println!("[config] syntax error in {}", path.display()),
+        }
         match line {
             Some(l) => anyhow::anyhow!(Msg::ConfigLineError(l).text()),
             None => anyhow::anyhow!(Msg::ConfigFormatError.text()),
@@ -177,7 +186,7 @@ pub fn parse(text: &str) -> Result<Config, toml::de::Error> {
     Ok(cfg)
 }
 
-/// 序列化成配置文件内容,供设置窗口保存
+/// Serializes to config file content, for the settings window to save
 pub fn to_toml(cfg: &Config) -> anyhow::Result<String> {
     let body = toml::to_string(cfg)?;
     Ok(format!(
@@ -185,7 +194,8 @@ pub fn to_toml(cfg: &Config) -> anyhow::Result<String> {
     ))
 }
 
-/// 按键索引转成输入名。旋钮每格是 A 或 B 一对脉冲,哪个是顺时针由 knob_swap 决定。
+/// Converts a key index to an input name. Each knob detent produces a pulse on A or on B, and
+/// knob_swap decides which of them is clockwise.
 pub fn key_name(index: usize, knob_swap: bool) -> Option<&'static str> {
     Some(match index {
         0 => {
@@ -209,7 +219,8 @@ pub fn key_name(index: usize, knob_swap: bool) -> Option<&'static str> {
         6 => "voice",
         7 => "action",
         8 => "enter",
-        // 9、10 拨杆由 ModeChange 事件统一处理,这里不绑定,避免同一次拨动触发两次
+        // 9 and 10 are the lever, handled by the ModeChange event, so they are not bound here.
+        // Otherwise one move would fire twice.
         _ => return None,
     })
 }

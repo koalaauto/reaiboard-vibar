@@ -4,6 +4,9 @@
 # another app (a terminal, an IDE) is killed on its first Bluetooth use. Starting a separate .app
 # with `open` makes the permission belong to that .app.
 #
+# Side effect: the throwaway app appears in System Settings → Privacy & Security with a made-up
+# name and no icon. For looking at the UI, copy the real Vibar.app instead, see AGENTS.md.
+#
 # Usage: scripts/devapp.sh <binary> [app-name] [args...]
 #   stdout and stderr go to build/<app-name>.out and .err
 set -euo pipefail

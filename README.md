@@ -32,7 +32,7 @@ Then:
 1. **Unplug the USB cable.** The keyboard does not advertise Bluetooth while it is plugged in.
 2. **Press any key** to wake it. The menu bar icon turns solid when it is connected.
 3. Allow **Bluetooth** when macOS asks, and **Accessibility** when the menu shows *Accessibility permission needed…*.
-4. Open the menu bar icon → **Settings…** to change the keys.
+4. Open the menu bar icon → **Settings…** to change the keys. On the very first launch the settings window opens by itself with a two-step *Get started* checklist (Accessibility, keyboard connected) that ticks off as you go and then disappears.
 
 > **Do not pair the keyboard in System Settings → Bluetooth.** Over Bluetooth it is not a normal keyboard, and a system-paired one keeps its connection to macOS and stops advertising, so Vibar cannot find it. If you already paired it, remove it there first. Also quit the vendor app: only one program can hold the keyboard.
 
@@ -121,11 +121,12 @@ Vibar needs **Bluetooth** (to talk to the keyboard) and **Accessibility** (to pr
 | The binary is killed as soon as it touches Bluetooth | You ran it from a terminal or IDE. Run `build/Vibar.app` instead. |
 | Knob goes the wrong way | Settings → Keyboard → Calibrate, or set `knob_swap = true` in the config. |
 | No `ReAI-Vibe-Board` input in System Settings → Sound | Enable it in Settings → Microphone (an administrator password is needed). If it still does not show, use Uninstall and enable it again. |
+| Something else is wrong | Settings → General → *Log file* → *Show in Finder*, and attach `vibar.log` to your report. It lives in `~/Library/Logs/Vibar/`, keeps the last 2 MB, and holds input names and connection events, never typed text. Glance at it first: a shell command from your config that fails to start is logged with its command line. |
 
 ## Uninstall
 
 1. In Vibar: Settings → Microphone → **Uninstall** to remove the audio driver, and switch off launch at login. Then quit Vibar and delete `Vibar.app`.
-2. Remove settings: `rm -rf ~/.config/vibar`.
+2. Remove settings and logs: `rm -rf ~/.config/vibar ~/Library/Logs/Vibar`.
 3. If the driver is still listed: `sudo rm -rf /Library/Audio/Plug-Ins/HAL/ReAIVibeBoard.driver && sudo killall coreaudiod`.
 4. If launch at login was on: `rm ~/Library/LaunchAgents/dev.koala.vibar.plist`.
 
